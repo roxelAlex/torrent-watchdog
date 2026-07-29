@@ -27,6 +27,11 @@ def check_all_torrents() -> None:
         db.close()
 
 
+def next_check_at():
+    job = scheduler.get_job("daily-torrent-check") if scheduler.running else None
+    return job.next_run_time if job else None
+
+
 def start_scheduler() -> None:
     settings = get_settings()
     if scheduler.running:

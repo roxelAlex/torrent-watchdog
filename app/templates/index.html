@@ -1,60 +1,75 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="summary">
-  <div>
-    <p class="eyebrow">Панель наблюдения</p>
-    <h1>Раздачи под присмотром</h1>
-    <p>Сервис проверяет обновления и при необходимости безопасно заменяет торрент в выбранном qBittorrent-клиенте.</p>
+<section class="watch">
+  <div class="watch-state">
+    <strong><span class="beacon big {{ watch.tone }}"></span>{{ watch.headline }}</strong>
+    <p>{{ watch.note }}</p>
   </div>
-  <div class="connection {{ 'ok' if ok_clients else 'bad' }}">
-    <span>qBittorrent-клиенты</span>
-    <strong>{{ ok_clients }} из {{ qb_statuses|length }} онлайн</strong>
-    <small>{% for qb in qb_statuses %}{{ qb.name }}: {{ "работает" if qb.status == "ok" else "нет связи" }}{% if not loop.last %} · {% endif %}{% endfor %}</small>
-  </div>
-</section>
-
-<section class="stats">
-  <div class="stat total"><span>Всего раздач</span><strong>{{ stats.total }}</strong><small>в базе</small></div>
-  <div class="stat active"><span>Активных</span><strong>{{ stats.active }}</strong><small>проверяются</small></div>
-  <div class="stat updates"><span>С обновлениями</span><strong>{{ stats.updates }}</strong><small>ждут действия</small></div>
-  <div class="stat errors"><span>Ошибок</span><strong>{{ stats.errors }}</strong><small>требуют внимания</small></div>
-  <div class="stat wide"><span>Последняя проверка</span><strong>{{ stats.last_check|dt }}</strong><small>по расписанию или вручную</small></div>
+  <dl class="watch-facts">
+    <div>
+      <dt>Последняя проверка</dt>
+      <dd>{{ stats.last_check|dt }}</dd>
+    </div>
+    <div>
+      <dt>Следующая</dt>
+      <dd>{{ next_check|dt }}</dd>
+    </div>
+    <div>
+      <dt>Клиенты</dt>
+      <dd {% if ok_clients < qb_statuses|length %}class="bad-text"{% endif %}>{{ ok_clients }} из {{ qb_statuses|length }} на связи</dd>
+    </div>
+    <div>
+      <dt>Раздач</dt>
+      <dd>{{ stats.total }}</dd>
+    </div>
+  </dl>
 </section>
 
 <section class="panel">
   <div class="panel-head">
     <div>
-      <p class="eyebrow">Список</p>
+      <p class="eyebrow">Реестр</p>
       <h2>Отслеживаемые раздачи</h2>
     </div>
-    <a class="button primary" href="/add">Добавить</a>
+    <a class="button primary" href="/add">Добавить раздачу</a>
   </div>
   <div class="table">
     <div class="row head">
-      <div>Название</div><div>Статус</div><div>Клиент</div><div>Категория</div><div>Auto</div><div>Проверка</div><div>Действия</div>
+      <div>Название</div><div>Статус</div><div>Вахта</div><div>Клиент</div><div>Категория</div><div>Проверена</div><div></div>
     </div>
     {% for t in torrents %}
     <div class="row status-row {{ t.status }}">
       <div data-label="Название">
-        <span class="beacon {{ t.status }}" title="{{ status_label.get(t.status, t.status) }}"></span>
-        <a class="torrent-title" href="/torrents/{{ t.id }}">{{ t.title }}</a>
+        <div class="cell-title">
+          <a class="torrent-title" href="/torrents/{{ t.id }}">{{ t.title }}</a>
+          {% if t.auto_update %}<span class="auto-chip" title="Обновление применяется автоматически">авто</span>{% endif %}
+        </div>
         {% if t.last_error %}<small class="row-note">{{ t.last_error }}</small>{% endif %}
       </div>
       <div data-label="Статус"><span class="status {{ t.status }}">{{ status_label.get(t.status, t.status) }}</span></div>
-      <div data-label="Клиент">{{ t.qb_client.name if t.qb_client else "Основной" }}</div>
-      <div data-label="Категория">{{ t.category or "-" }}</div>
-      <div data-label="Auto"><span class="switch-label {{ 'on' if t.auto_update else '' }}">{{ "да" if t.auto_update else "нет" }}</span></div>
-      <div data-label="Проверка">{{ t.last_check_at|dt }}</div>
+      <div data-label="Вахта">
+        {% set strip = duty.get(t.id) %}
+        {% if strip %}
+        <div class="duty" role="img" aria-label="Последние {{ strip|length }} проверок">
+          {% for tick in strip %}<i class="{{ tick.kind }}" title="{{ tick.title }}"></i>{% endfor %}
+        </div>
+        {% else %}
+        <span class="duty-empty">—</span>
+        {% endif %}
+      </div>
+      <div data-label="Клиент" class="cell-client">{{ t.qb_client.name if t.qb_client else "Основной" }}</div>
+      <div data-label="Категория" class="cell-category">{{ t.category or "—" }}</div>
+      <div data-label="Проверена" class="cell-time">{{ t.last_check_at|dt }}</div>
       <div data-label="Действия" class="actions">
-        <a class="button" href="/torrents/{{ t.id }}">Открыть</a>
         <form method="post" action="/torrents/{{ t.id }}/check"><button>Проверить</button></form>
-        <form method="post" action="/torrents/{{ t.id }}/apply-update"><button>Применить</button></form>
-        <form method="post" action="/torrents/{{ t.id }}/disable"><button>Отключить</button></form>
-        <form method="post" action="/torrents/{{ t.id }}/delete" data-confirm="Удалить из отслеживания? Файлы не удаляются."><button class="danger">Удалить</button></form>
+        {% if t.status == "update_available" %}
+        <form method="post" action="/torrents/{{ t.id }}/apply-update"><button class="primary">Применить</button></form>
+        {% endif %}
+        <a class="button" href="/torrents/{{ t.id }}">Открыть</a>
       </div>
     </div>
     {% else %}
-    <p class="empty">Раздач пока нет.</p>
+    <p class="empty">Пока ничего не отслеживается. Добавьте раздачу — сервис будет сверять её хеш каждый день и покажет, когда выйдет новая версия.</p>
     {% endfor %}
   </div>
 </section>

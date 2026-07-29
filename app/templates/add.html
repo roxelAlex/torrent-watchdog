@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="panel narrow">
-  <h1>Добавить раздачу</h1>
+  <p class="eyebrow">Новая раздача</p>
+  <h1>Взять раздачу под наблюдение</h1>
   {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
   <form class="form" method="post" action="/add">
+    <label>Ссылка на раздачу
+      <input name="source_url" required placeholder="Тема RuTracker, ссылка на .torrent или magnet:">
+    </label>
     <label>Клиент qBittorrent
       <select name="qb_client_id" id="qb-client-select">
         {% for client in clients %}
@@ -11,11 +15,10 @@
         {% endfor %}
       </select>
     </label>
-    <label>Ссылка на раздачу<input name="source_url" required placeholder="https://... .torrent, magnet: или RuTracker topic"></label>
-    <label>Название<input name="title" placeholder="Необязательно"></label>
+    <label>Название<input name="title" placeholder="Возьмём из торрента, если не заполнить"></label>
     <label>Папка загрузки<input name="save_path" placeholder="/downloads"></label>
     <label>Категория
-      <input name="category" list="qb-categories" placeholder="Можно выбрать из qBittorrent или ввести вручную">
+      <input name="category" list="qb-categories" placeholder="Выберите из qBittorrent или введите свою">
       <datalist id="qb-categories">
         {% for category in categories %}
         <option value="{{ category.name }}" label="{{ category.save_path }}"></option>
@@ -23,26 +26,27 @@
       </datalist>
     </label>
     {% if categories_error %}
-    <div class="hint" id="category-hint">Категории qBittorrent не загружены: {{ categories_error }}</div>
+    <div class="hint" id="category-hint">Категории не загрузились: {{ categories_error }}</div>
     {% elif categories %}
     <div class="hint" id="category-hint">Категории загружены из выбранного клиента.</div>
     {% else %}
-    <div class="hint" id="category-hint">В qBittorrent нет категорий или список пуст.</div>
+    <div class="hint" id="category-hint">В выбранном клиенте категорий нет — введите свою.</div>
     {% endif %}
-    <label>Теги<input name="tags" placeholder="tag1, tag2"></label>
-    <label>Как применять обновления
+    <label>Теги<input name="tags" placeholder="через запятую"></label>
+    <label>Как применять обновление
       <select name="update_mode">
         <option value="new_files_only" selected>Скачивать только новые файлы</option>
-        <option value="full_recheck">Полная замена с проверкой файлов</option>
+        <option value="full_recheck">Заменить целиком и проверить файлы</option>
       </select>
     </label>
+    <div class="hint">Для медиатеки подходит первый режим: старые файлы остаются нетронутыми, качаются только добавленные. Второй перекачивает раздачу с проверкой всех файлов.</div>
     <div class="option-grid">
-      <label class="check"><input type="checkbox" name="auto_update" {% if settings.default_auto_update %}checked{% endif %}> Автообновление</label>
+      <label class="check"><input type="checkbox" name="auto_update" {% if settings.default_auto_update %}checked{% endif %}> Обновлять автоматически</label>
       <label class="check"><input type="checkbox" name="recheck_after_add" {% if settings.default_recheck_after_add %}checked{% endif %}> Проверить файлы после добавления</label>
       <label class="check"><input type="checkbox" name="start_after_recheck" {% if settings.default_start_after_recheck %}checked{% endif %}> Запустить после проверки</label>
       <label class="check"><input type="checkbox" name="add_paused" {% if settings.default_add_paused %}checked{% endif %}> Добавить на паузе</label>
     </div>
-    <button class="primary">Добавить</button>
+    <button class="primary">Добавить раздачу</button>
   </form>
 </section>
 {% endblock %}

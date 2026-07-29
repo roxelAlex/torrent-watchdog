@@ -10,6 +10,7 @@ from app.auth import check_credentials
 from app.config import get_settings
 from app.db import get_db
 from app.models import AppSetting, CheckEvent, TorrentStatus, TorrentVersion, TrackedTorrent
+from app.scheduler import next_check_at
 from app.schemas import TorrentCreate
 from app.services.qbittorrent_client import QBittorrentClient
 from app.services.qbittorrent_registry import (
@@ -30,7 +31,7 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["app_version"] = get_settings().app_version
 templates.env.globals["app_name"] = get_settings().app_name
-templates.env.globals["status_label"] = {
+STATUS_LABEL = {
     "active": "активна",
     "update_available": "найдено обновление",
     "updating": "обновляется",
@@ -38,7 +39,7 @@ templates.env.globals["status_label"] = {
     "error": "ошибка",
     "disabled": "отключена",
 }
-templates.env.globals["event_label"] = {
+EVENT_LABEL = {
     "check_started": "проверка начата",
     "no_changes": "без изменений",
     "update_found": "обновление найдено",
@@ -48,6 +49,16 @@ templates.env.globals["event_label"] = {
     "error": "ошибка",
     "qbittorrent_unavailable": "qBittorrent недоступен",
 }
+DUTY_OUTCOMES = {
+    "no_changes": "ok",
+    "update_applied": "applied",
+    "update_found": "found",
+    "update_failed": "bad",
+    "error": "bad",
+    "qbittorrent_unavailable": "bad",
+}
+templates.env.globals["status_label"] = STATUS_LABEL
+templates.env.globals["event_label"] = EVENT_LABEL
 
 
 def _fmt_dt(value) -> str:
@@ -84,6 +95,50 @@ def _qb_categories(db: Session, client_id: int | None = None) -> tuple[list[dict
         return qb.get_categories(), None
     except Exception as exc:
         return [], str(exc)
+
+
+def _duty_strip(db: Session, tracked_id: int, limit: int = 14) -> list[dict[str, str]]:
+    """Последние исходы проверок, от старых к новым, для полоски вахты."""
+    events = (
+        db.query(CheckEvent)
+        .filter(CheckEvent.tracked_torrent_id == tracked_id, CheckEvent.event_type.in_(DUTY_OUTCOMES))
+        .order_by(desc(CheckEvent.created_at))
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "kind": DUTY_OUTCOMES[event.event_type],
+            "title": f"{_fmt_dt(event.created_at)} — {EVENT_LABEL.get(event.event_type, event.event_type)}",
+        }
+        for event in reversed(events)
+    ]
+
+
+def _watch_state(stats: dict) -> dict[str, str]:
+    if not stats["total"]:
+        return {
+            "tone": "disabled",
+            "headline": "Вахта пустая",
+            "note": "Добавьте первую раздачу — сервис начнёт сверять её хеш каждый день.",
+        }
+    if stats["errors"]:
+        return {
+            "tone": "error",
+            "headline": f"Ошибок: {stats['errors']}",
+            "note": "Откройте раздачу, чтобы увидеть причину и повторить проверку.",
+        }
+    if stats["updates"]:
+        return {
+            "tone": "update_available",
+            "headline": f"Ждут решения: {stats['updates']}",
+            "note": "Для этих раздач найдена новая версия. Примените обновление или откройте раздачу.",
+        }
+    return {
+        "tone": "active",
+        "headline": "Всё спокойно",
+        "note": "Ни одна раздача не требует внимания.",
+    }
 
 
 def _bool(value: str | None) -> bool:
@@ -127,7 +182,16 @@ def index(request: Request, db: Session = Depends(get_db)):
     ok_clients = sum(1 for item in qb_statuses if item["status"] == "ok")
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "torrents": torrents, "stats": stats, "qb_statuses": qb_statuses, "ok_clients": ok_clients},
+        {
+            "request": request,
+            "torrents": torrents,
+            "stats": stats,
+            "qb_statuses": qb_statuses,
+            "ok_clients": ok_clients,
+            "watch": _watch_state(stats),
+            "duty": {item.id: _duty_strip(db, item.id) for item in torrents},
+            "next_check": next_check_at(),
+        },
     )
 
 
@@ -316,22 +380,12 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
 @router.post("/settings")
 def save_settings(
     request: Request,
-    qb_host: str = Form(""),
-    qb_username: str = Form(""),
-    qb_password: str = Form(""),
-    check_hour: str = Form(""),
-    check_minute: str = Form(""),
     rutracker_cookie: str = Form(""),
     flaresolver_address: str = Form(""),
     flaresolver_port: str = Form(""),
     db: Session = Depends(get_db),
 ):
     for key, value in {
-        "qb_host": qb_host,
-        "qb_username": qb_username,
-        "qb_password": qb_password,
-        "check_hour": check_hour,
-        "check_minute": check_minute,
         "rutracker_cookie": rutracker_cookie,
         "flaresolver_address": flaresolver_address,
         "flaresolver_port": flaresolver_port,
