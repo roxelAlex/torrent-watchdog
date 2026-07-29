@@ -19,15 +19,11 @@
       <div>
         <span class="beacon {{ 'active' if online else 'error' }}" role="img" aria-label="{{ 'на связи' if online else 'нет связи' }}"></span>
         <strong>{{ client.name }}</strong>
-        {% if client.is_default %}<span class="pill">основной</span>{% endif %}
       </div>
       <span>{{ client.host }}</span>
       <small {% if not online %}class="bad-text"{% endif %}>
         {% if online %}на связи{% if status.version %} · {{ status.version }}{% endif %}{% else %}нет связи{% endif %}
       </small>
-      {% if not client.is_default %}
-      <form method="post" action="/settings/qbittorrent/{{ client.id }}/default"><button>Сделать основным</button></form>
-      {% endif %}
       <details class="mini-edit">
         <summary>Изменить</summary>
         <form class="form compact" method="post" action="/settings/qbittorrent/{{ client.id }}">
@@ -53,7 +49,6 @@
       <label>Пароль<input name="password" type="password"></label>
       <label>Таймаут, сек<input name="timeout_seconds" type="number" min="3" value="30"></label>
       <label class="check"><input type="checkbox" name="verify_tls"> Проверять TLS-сертификат</label>
-      <label class="check"><input type="checkbox" name="is_default"> Сделать основным</label>
       <button class="primary">Добавить клиент</button>
     </form>
   </details>

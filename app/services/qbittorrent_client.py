@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class QBittorrentClient:
     def __init__(self, config: QbittorrentClientConfig | None = None) -> None:
         settings = get_settings()
-        self.name = config.name if config else "Основной"
+        self.name = config.name if config else "клиент из .env"
         self.base_url = (config.host if config else settings.qb_host).rstrip("/")
         self.username = config.username if config else settings.qb_username
         self.password = config.password if config else settings.qb_password
@@ -101,19 +101,6 @@ class QBittorrentClient:
                 files={"torrents": (path.name, torrent_file, "application/x-bittorrent")},
             )
         return path.stem.lower()
-
-    def add_magnet(self, magnet_url: str, save_path: str, category: str = "", tags: str = "", paused: bool = True) -> str:
-        self._post(
-            "/api/v2/torrents/add",
-            data={
-                "urls": magnet_url,
-                "savepath": save_path,
-                "category": category,
-                "tags": tags,
-                "paused": "true" if paused else "false",
-            },
-        )
-        return magnet_url.lower().split("btih:")[-1].split("&")[0]
 
     def pause_torrent(self, torrent_hash: str) -> None:
         endpoint = self._post_first_available(["/api/v2/torrents/pause", "/api/v2/torrents/stop"], data={"hashes": torrent_hash})

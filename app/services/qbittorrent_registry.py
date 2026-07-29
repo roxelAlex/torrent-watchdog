@@ -12,23 +12,27 @@ _categories_cache = TTLCache(get_settings().qb_categories_cache_seconds)
 
 
 def list_qb_clients(db: Session) -> list[QbittorrentClientConfig]:
-    return db.query(QbittorrentClientConfig).order_by(QbittorrentClientConfig.is_default.desc(), QbittorrentClientConfig.name).all()
+    return db.query(QbittorrentClientConfig).order_by(QbittorrentClientConfig.name).all()
 
 
-def get_default_qb_client(db: Session) -> QbittorrentClientConfig:
-    client = db.query(QbittorrentClientConfig).filter(QbittorrentClientConfig.is_default.is_(True)).first()
+def get_fallback_qb_client(db: Session) -> QbittorrentClientConfig:
+    """Клиент для раздач без явной привязки — первый по имени.
+
+    Понятия «основной» нет: каждая раздача привязывается к клиенту при
+    добавлении, а это запасной вариант для старых записей и пустой базы.
+    """
+    client = db.query(QbittorrentClientConfig).order_by(QbittorrentClientConfig.name).first()
     if client:
         return client
 
     settings = get_settings()
     client = QbittorrentClientConfig(
-        name="Основной",
+        name="qBittorrent",
         host=settings.qb_host,
         username=settings.qb_username,
         password=settings.qb_password,
         verify_tls=settings.qb_verify_tls,
         timeout_seconds=settings.qb_timeout_seconds,
-        is_default=True,
     )
     db.add(client)
     db.commit()
@@ -41,7 +45,7 @@ def get_qb_client_config(db: Session, client_id: int | None) -> QbittorrentClien
         client = db.get(QbittorrentClientConfig, client_id)
         if client:
             return client
-    return get_default_qb_client(db)
+    return get_fallback_qb_client(db)
 
 
 def create_qb_client(
@@ -52,10 +56,7 @@ def create_qb_client(
     password: str,
     verify_tls: bool,
     timeout_seconds: int,
-    is_default: bool = False,
 ) -> QbittorrentClientConfig:
-    if is_default:
-        db.query(QbittorrentClientConfig).update({QbittorrentClientConfig.is_default: False})
     client = QbittorrentClientConfig(
         name=name.strip() or host,
         host=host.rstrip("/"),
@@ -63,23 +64,12 @@ def create_qb_client(
         password=password,
         verify_tls=verify_tls,
         timeout_seconds=timeout_seconds,
-        is_default=is_default,
     )
     db.add(client)
     db.commit()
     db.refresh(client)
     invalidate_qb_caches()
     return client
-
-
-def set_default_qb_client(db: Session, client_id: int) -> None:
-    client = db.get(QbittorrentClientConfig, client_id)
-    if not client:
-        raise ValueError("Клиент qBittorrent не найден")
-    db.query(QbittorrentClientConfig).update({QbittorrentClientConfig.is_default: False})
-    client.is_default = True
-    db.commit()
-    invalidate_qb_caches()
 
 
 def update_qb_client(
@@ -121,7 +111,6 @@ def _probe(client: QbittorrentClientConfig) -> dict[str, str]:
         "status": result.get("status", "unknown"),
         "version": result.get("version", ""),
         "error": result.get("error", ""),
-        "is_default": "true" if client.is_default else "false",
     }
 
 

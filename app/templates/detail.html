@@ -21,7 +21,7 @@
   </div>
   {% endif %}
   <div class="quick-facts">
-    <div><span>Клиент</span><strong>{{ t.qb_client.name if t.qb_client else "Основной" }}</strong></div>
+    <div><span>Клиент</span><strong>{{ t.qb_client.name if t.qb_client else "не задан" }}</strong></div>
     <div><span>Категория</span><strong>{{ t.category or "без категории" }}</strong></div>
     <div><span>Как обновлять</span><strong>{{ "только новые файлы" if t.update_mode == "new_files_only" else "полная замена с проверкой" }}</strong></div>
     <div><span>Автообновление</span><strong>{{ "включено" if t.auto_update else "выключено" }}</strong></div>

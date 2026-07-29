@@ -40,7 +40,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _migrate_sqlite()
     _ensure_indexes()
-    _ensure_default_qbittorrent_client(models)
+    _ensure_qbittorrent_client(models)
     _drop_unused_settings(models)
     _recover_interrupted_updates(models)
 
@@ -105,25 +105,33 @@ def _migrate_sqlite() -> None:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE tracked_torrents ADD COLUMN update_mode VARCHAR(32) DEFAULT 'new_files_only'"))
 
+    if "qbittorrent_clients" in inspector.get_table_names():
+        client_columns = {column["name"] for column in inspector.get_columns("qbittorrent_clients")}
+        # Понятия «основной клиент» больше нет. Колонку нужно именно удалить:
+        # она NOT NULL, и без неё в модели вставка нового клиента упала бы.
+        if "is_default" in client_columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE qbittorrent_clients DROP COLUMN is_default"))
 
-def _ensure_default_qbittorrent_client(models) -> None:
+
+def _ensure_qbittorrent_client(models) -> None:
+    """В пустой базе заводит клиент из .env и привязывает к нему раздачи без клиента."""
     db = SessionLocal()
     try:
-        default_client = db.query(models.QbittorrentClientConfig).filter(models.QbittorrentClientConfig.is_default.is_(True)).first()
-        if not default_client:
-            default_client = models.QbittorrentClientConfig(
-                name="Основной",
+        client = db.query(models.QbittorrentClientConfig).order_by(models.QbittorrentClientConfig.name).first()
+        if not client:
+            client = models.QbittorrentClientConfig(
+                name="qBittorrent",
                 host=settings.qb_host,
                 username=settings.qb_username,
                 password=settings.qb_password,
                 verify_tls=settings.qb_verify_tls,
                 timeout_seconds=settings.qb_timeout_seconds,
-                is_default=True,
             )
-            db.add(default_client)
+            db.add(client)
             db.flush()
         db.query(models.TrackedTorrent).filter(models.TrackedTorrent.qb_client_id.is_(None)).update(
-            {models.TrackedTorrent.qb_client_id: default_client.id}
+            {models.TrackedTorrent.qb_client_id: client.id}
         )
         db.commit()
     finally:

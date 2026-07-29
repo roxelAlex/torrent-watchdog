@@ -57,7 +57,7 @@
         <span class="duty-empty">—</span>
         {% endif %}
       </div>
-      <div data-label="Клиент" class="cell-client">{{ t.qb_client.name if t.qb_client else "Основной" }}</div>
+      <div data-label="Клиент" class="cell-client">{{ t.qb_client.name if t.qb_client else "не задан" }}</div>
       <div data-label="Категория" class="cell-category">{{ t.category or "—" }}</div>
       <div data-label="Проверена" class="cell-time">{{ t.last_check_at|dt }}</div>
       <div data-label="Действия" class="actions">

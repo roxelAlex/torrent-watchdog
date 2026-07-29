@@ -17,10 +17,9 @@ from app.services.qbittorrent_registry import (
     client_categories,
     client_statuses,
     create_qb_client,
-    get_default_qb_client,
+    get_fallback_qb_client,
     get_qb_client_config,
     list_qb_clients,
-    set_default_qb_client,
     update_qb_client,
 )
 from app.services.torrent_settings import change_torrent_category
@@ -215,9 +214,10 @@ def index(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/add")
 def add_page(request: Request, db: Session = Depends(get_db)):
-    default_client = get_default_qb_client(db)
+    # Понятия «основной» нет: подставляем первого по имени, выбор всё равно за пользователем.
+    selected_client = get_fallback_qb_client(db)
     clients = list_qb_clients(db)
-    categories, categories_error = client_categories(db, default_client.id)
+    categories, categories_error = client_categories(db, selected_client.id)
     return templates.TemplateResponse(
         "add.html",
         {
@@ -225,7 +225,7 @@ def add_page(request: Request, db: Session = Depends(get_db)):
             "settings": get_settings(),
             "error": None,
             "clients": clients,
-            "selected_client_id": default_client.id,
+            "selected_client_id": selected_client.id,
             "categories": categories,
             "categories_error": categories_error,
         },
@@ -445,20 +445,13 @@ def add_qb_client(
     password: str = Form(""),
     verify_tls: str | None = Form(None),
     timeout_seconds: int = Form(30),
-    is_default: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     try:
-        create_qb_client(db, name, host, username, password, _bool(verify_tls), timeout_seconds, _bool(is_default))
+        create_qb_client(db, name, host, username, password, _bool(verify_tls), timeout_seconds)
         return _redirect("/settings")
     except Exception as exc:
         return _settings_response(request, db, error=str(exc), status_code=400)
-
-
-@router.post("/settings/qbittorrent/{client_id}/default")
-def make_qb_default(client_id: int, db: Session = Depends(get_db)):
-    set_default_qb_client(db, client_id)
-    return _redirect("/settings")
 
 
 @router.post("/settings/qbittorrent/{client_id}")
