@@ -2,16 +2,37 @@
 
 Веб-сервис для отслеживания обновлений раздач RuTracker. Под наблюдение берётся ссылка на тему; сервис сохраняет текущий `info_hash`, скачивает с темы свежий `.torrent` по расписанию и показывает найденные обновления. Если включён `auto_update`, он заменяет торрент в удалённом qBittorrent: ставит старый торрент на паузу, удаляет его из qBittorrent с `deleteFiles=false`, добавляет новый `.torrent` в тот же `save_path`, восстанавливает категорию и теги и применяет выбранный режим обновления. Файлы на диске не удаляются никогда.
 
-Версия: `0.7.5`. Полный список изменений — в [CHANGELOG.md](CHANGELOG.md).
+Версия: `0.7.6`. Полный список изменений — в [CHANGELOG.md](CHANGELOG.md).
 
 ## Запуск
 
+Нужен только Docker и файл настроек:
+
 ```bash
+curl -O https://raw.githubusercontent.com/roxelalex/torrent-watchdog/master/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/roxelalex/torrent-watchdog/master/.env.example
+docker compose up -d
+```
+
+Поднимутся два контейнера: сам сервис и `torrent-watchdog-flaresolverr` — свой образ FlareSolverr, без него RuTracker не отдаёт файлы (см. раздел про FlareSolverr).
+
+Образы собираются под `linux/amd64` и `linux/arm64`, так что NAS и Raspberry Pi тоже подходят:
+
+```text
+roxelalex/torrent-watchdog:latest
+roxelalex/torrent-watchdog-flaresolverr:latest
+```
+
+Из исходников — то же самое, только со сборкой:
+
+```bash
+git clone https://github.com/roxelalex/torrent-watchdog.git
+cd torrent-watchdog
 cp .env.example .env
 docker compose up -d --build
 ```
 
-Поднимаются два контейнера: `torrent-watchdog` и `torrent-watchdog-flaresolverr` (свой образ, см. раздел про FlareSolverr).
+В клоне репозитория Compose сам подхватывает `docker-compose.override.yml` и собирает образы локально. Чтобы и там брать опубликованные, добавьте `-f docker-compose.yml`.
 
 Откройте веб-интерфейс:
 
@@ -34,16 +55,18 @@ admin / change_me
 
 HTTP Basic принимается как запасной способ авторизации для `/api/*` — это удобно для скриптов, веб-интерфейс им не пользуется.
 
+Дальше нужно указать qBittorrent и доступ к трекеру — оба на странице «Настройки».
+
 ## Настройка .env
 
 Полный список переменных со значениями по умолчанию — в [.env.example](.env.example). Ключевые:
 
 ```env
 APP_PORT=8096
-TZ=Asia/Yekaterinburg
+TZ=UTC
 DATABASE_URL=sqlite:////data/app.db
 
-QB_HOST=http://192.168.0.220:8090
+QB_HOST=http://192.168.1.10:8080
 QB_USERNAME=admin
 QB_PASSWORD=adminadmin
 
@@ -90,7 +113,7 @@ qBittorrent не запускается внутри `docker-compose.yml` это
 5. В `.env` сервиса `torrent-watchdog` указать:
 
 ```env
-QB_HOST=http://192.168.0.220:8090
+QB_HOST=http://192.168.1.10:8080
 QB_USERNAME=ваш_логин
 QB_PASSWORD=ваш_пароль
 ```
@@ -98,14 +121,14 @@ QB_PASSWORD=ваш_пароль
 6. Проверить доступность с сервера:
 
 ```bash
-curl -I http://192.168.0.220:8090
+curl -I http://192.168.1.10:8080
 ```
 
 7. Если сервис запущен в Docker, проверить из контейнера:
 
 ```bash
 docker exec -it torrent-watchdog sh
-wget -S -O- http://192.168.0.220:8090
+wget -S -O- http://192.168.1.10:8080
 ```
 
 Пользователь из `QB_USERNAME` должен иметь право добавлять, удалять, ставить на паузу, запускать и recheck торренты.
@@ -357,6 +380,36 @@ APP_LANGUAGE=ru
 Флаг необязателен: без него язык получит значок глобуса. Переводить всё сразу тоже не обязательно — недостающие ключи берутся из русского каталога, страница не ломается. Полноту проверяет тест: он падает, если в каталоге не хватает ключей, есть лишние или в строке потерялся параметр вроде `{count}`.
 
 Тексты ошибок и событий тоже живут в каталоге, отдельными ключами `error.*` и `msg.*`.
+
+## Публикация образов
+
+Собирает и выкладывает GitHub Actions по тегу версии:
+
+```bash
+git tag v0.7.6 && git push --tags
+```
+
+Workflow сверяет тег с файлом `VERSION` и отказывается публиковать при расхождении — иначе образ уедет под чужим номером. Дальше собирает оба образа под две архитектуры и пушит с тегами `0.7.6` и `latest`.
+
+В секретах репозитория нужны `DOCKERHUB_USERNAME` и `DOCKERHUB_TOKEN` (токен создаётся в Docker Hub → Account Settings → Personal access tokens, прав `Read & Write` достаточно).
+
+Собрать и запушить вручную можно и без CI:
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 --push \
+  -t roxelalex/torrent-watchdog:0.7.6 -t roxelalex/torrent-watchdog:latest .
+docker buildx build --platform linux/amd64,linux/arm64 --push \
+  -f Dockerfile.flaresolverr \
+  -t roxelalex/torrent-watchdog-flaresolverr:0.7.6 \
+  -t roxelalex/torrent-watchdog-flaresolverr:latest .
+```
+
+Чтобы запустить не свои образы, а чужие или локальные, задайте в `.env`:
+
+```env
+IMAGE_PREFIX=другой-аккаунт
+IMAGE_TAG=0.7.5
+```
 
 ## Тесты
 

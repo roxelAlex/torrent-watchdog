@@ -1,8 +1,13 @@
 FROM python:3.12-slim
 
+LABEL org.opencontainers.image.title="torrent-watchdog" \
+      org.opencontainers.image.description="Отслеживание обновлений раздач RuTracker с применением в qBittorrent" \
+      org.opencontainers.image.source="https://github.com/roxelalex/torrent-watchdog" \
+      org.opencontainers.image.licenses="MIT"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    TZ=Asia/Yekaterinburg
+    TZ=UTC
 
 WORKDIR /app
 

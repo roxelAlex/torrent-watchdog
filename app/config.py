@@ -6,10 +6,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "torrent-watchdog"
-    app_version: str = "0.7.5"
+    app_version: str = "0.7.6"
     app_host: str = "0.0.0.0"
     app_port: int = 8096
-    tz: str = "Asia/Yekaterinburg"
+    tz: str = "UTC"
     # Язык по умолчанию; переключатель в шапке запоминает выбор в cookie.
     app_language: str = "ru"
 
@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     data_dir: Path = Path("/data")
     torrents_dir: Path = Path("/data/torrents")
 
-    qb_host: str = "http://192.168.0.220:8090"
+    qb_host: str = "http://192.168.1.10:8080"
     qb_username: str = "admin"
     qb_password: str = "adminadmin"
     qb_verify_tls: bool = False

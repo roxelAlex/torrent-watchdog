@@ -1,17 +1,16 @@
 services:
   flaresolverr:
-    build:
-      context: .
-      dockerfile: Dockerfile.flaresolverr
-    image: torrent-watchdog-flaresolverr
+    # Свой образ, а не стандартный FlareSolverr: он умеет отдавать только HTML,
+    # а dl.php RuTracker возвращает файл. Подробности — в README.
+    image: ${IMAGE_PREFIX:-roxelalex}/torrent-watchdog-flaresolverr:${IMAGE_TAG:-latest}
     container_name: torrent-watchdog-flaresolverr
     environment:
-      - TZ=${TZ:-Asia/Yekaterinburg}
+      - TZ=${TZ:-UTC}
       - LOG_LEVEL=info
     restart: unless-stopped
 
   torrent-watchdog:
-    build: .
+    image: ${IMAGE_PREFIX:-roxelalex}/torrent-watchdog:${IMAGE_TAG:-latest}
     container_name: torrent-watchdog
     env_file:
       - .env
@@ -20,7 +19,7 @@ services:
     volumes:
       - ./data:/data
     environment:
-      - TZ=${TZ:-Asia/Yekaterinburg}
+      - TZ=${TZ:-UTC}
     depends_on:
       - flaresolverr
     restart: unless-stopped

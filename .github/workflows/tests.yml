@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Синтаксис и то, что скрипт переживает загрузку страницы: обращение
+      # к const до объявления once уже роняло весь файл, а --check это пропускает.
+      - run: node --check app/static/app.js
+      - run: node tests/js/smoke.js "$PWD/app/static/app.js"

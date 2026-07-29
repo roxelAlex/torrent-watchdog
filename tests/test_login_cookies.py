@@ -7,7 +7,7 @@
 from app.services.rutracker_auth import cookies_for_login_page
 
 FULL_COOKIE = (
-    "bb_guid=Wan3; bb_ssl=1; bb_session=0-21806265-secret; "
+    "bb_guid=Wan3; bb_ssl=1; bb_session=0-1234567-secret; "
     "bb_t=a%3A3; cf_clearance=kOOVGNt"
 )
 

@@ -1,4 +1,12 @@
+# Расширение официального FlareSolverr (MIT, https://github.com/FlareSolverr/FlareSolverr):
+# добавляет endpoints /download и /login. Стандартный образ отдаёт только HTML
+# страницы, а dl.php RuTracker возвращает файл, и вход требует настоящей формы.
 FROM ghcr.io/flaresolverr/flaresolverr:latest
+
+LABEL org.opencontainers.image.title="torrent-watchdog-flaresolverr" \
+      org.opencontainers.image.description="FlareSolverr с endpoints скачивания и входа для torrent-watchdog" \
+      org.opencontainers.image.source="https://github.com/roxelalex/torrent-watchdog" \
+      org.opencontainers.image.licenses="MIT"
 
 USER root
 COPY flaresolverr-extended.py /app/flaresolverr-extended.py

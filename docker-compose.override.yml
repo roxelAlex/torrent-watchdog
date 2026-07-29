@@ -1,0 +1,14 @@
+# Сборка из исходников. Compose подхватывает этот файл автоматически, поэтому
+# в клоне репозитория `docker compose up -d --build` собирает локально, а тому,
+# кто скачал только docker-compose.yml, образы прилетают из реестра.
+#
+# Чтобы в клоне тоже брать опубликованные образы:
+#   docker compose -f docker-compose.yml up -d
+services:
+  flaresolverr:
+    build:
+      context: .
+      dockerfile: Dockerfile.flaresolverr
+
+  torrent-watchdog:
+    build: .
