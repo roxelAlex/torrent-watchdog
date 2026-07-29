@@ -65,13 +65,51 @@ def test_message_is_translated():
     russian = notifier.build_message("update_found", "msg.update_found", params, "T", "ru")
     english = notifier.build_message("update_found", "msg.update_found", params, "T", "en")
     assert russian != english
-    assert english.startswith("Update found")
-    assert russian.startswith("Обновление найдено")
+    assert "Update found" in english
+    assert "Обновление найдено" in russian
 
 
-def test_message_without_title_has_no_empty_line():
+def test_message_layout():
+    text = notifier.build_message("no_changes", "msg.no_changes", {}, "Раздача", "en")
+    assert text == "💤 <b>No changes</b>\n<i>Раздача</i>\n\nNo changes"
+
+
+def test_message_without_title_skips_that_line():
     text = notifier.build_message("no_changes", "msg.no_changes", {}, "", "en")
-    assert text == "No changes\n\nNo changes"
+    assert text == "💤 <b>No changes</b>\n\nNo changes"
+
+
+@pytest.mark.parametrize("event_type, icon", [
+    ("update_found", "🆕"), ("update_applied", "✅"), ("update_failed", "❌"),
+    ("error", "⚠️"), ("qbittorrent_unavailable", "🔌"),
+])
+def test_every_event_has_its_own_icon(event_type, icon):
+    """По значку в списке чатов видно, что случилось, не открывая сообщение."""
+    assert notifier.build_message(event_type, "msg.no_changes", {}, "", "en").startswith(icon)
+
+
+def test_unknown_event_gets_a_neutral_icon():
+    assert notifier.build_message("что-то новое", "msg.no_changes", {}, "", "en").startswith("🔔")
+
+
+def test_angle_brackets_in_title_are_escaped():
+    """Без экранирования Telegram просто откажется доставить такое сообщение."""
+    text = notifier.build_message("error", "msg.no_changes", {}, "Сериал <2026> & прочее", "ru")
+    assert "&lt;2026&gt; &amp; прочее" in text
+    assert "<2026>" not in text
+
+
+def test_html_in_error_text_is_escaped():
+    text = notifier.build_message("error", "msg.raw", {"error": "<b>сломалось</b>"}, "", "ru")
+    assert "&lt;b&gt;сломалось&lt;/b&gt;" in text
+    # Разметка осталась только наша.
+    assert text.count("<b>") == 1
+
+
+def test_no_links_in_message():
+    text = notifier.build_message("update_found", "msg.update_found",
+                                  {"new": 1, "existing": 2, "removed": 0}, "Раздача", "ru")
+    assert "<a " not in text and "href" not in text
 
 
 def test_send_without_settings_is_rejected_clearly():

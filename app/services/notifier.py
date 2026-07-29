@@ -7,6 +7,7 @@ Telegram — это не повод считать, что раздача не �
 запроса, ни cookie, а читать сообщения может вообще другой человек.
 """
 
+import html
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -22,6 +23,18 @@ logger = logging.getLogger(__name__)
 
 API_URL = "https://api.telegram.org/bot{token}/sendMessage"
 SEND_TIMEOUT_SECONDS = 15
+
+# Значок вместо цветной плашки: в списке чатов видно, что случилось, не открывая.
+EVENT_ICONS = {
+    "update_found": "🆕",
+    "update_applied": "✅",
+    "update_failed": "❌",
+    "error": "⚠️",
+    "qbittorrent_unavailable": "🔌",
+    "no_changes": "💤",
+    "manual_action": "✋",
+}
+DEFAULT_ICON = "🔔"
 
 # События, о которых имеет смысл писать по умолчанию: те, что требуют решения
 # или означают поломку. Проверки без изменений сюда не входят — их две в день.
@@ -103,12 +116,22 @@ def _torrent_title(tracked_id: int | None) -> str:
 
 
 def build_message(event_type: str, code: str, params: dict, title: str, language: str) -> str:
-    """Заголовок — название раздачи и тип события, ниже сам текст."""
+    """Разметка Telegram: значок и тип события, название раздачи, текст.
+
+    Всё подставляемое экранируется: в названии раздачи и в тексте ошибки
+    легко встречаются угловые скобки и амперсанды, а parse_mode=HTML на них
+    просто отказывается доставлять сообщение.
+    """
+    icon = EVENT_ICONS.get(event_type, DEFAULT_ICON)
     head = translate(f"event.{event_type}", language).capitalize()
     body = translate(code, language, **params)
+
+    lines = [f"{icon} <b>{html.escape(head)}</b>"]
     if title:
-        return f"{head}\n{title}\n\n{body}"
-    return f"{head}\n\n{body}"
+        lines.append(f"<i>{html.escape(title)}</i>")
+    lines.append("")
+    lines.append(html.escape(body))
+    return "\n".join(lines)
 
 
 def send(text: str, settings: TelegramSettings | None = None) -> None:
@@ -120,7 +143,12 @@ def send(text: str, settings: TelegramSettings | None = None) -> None:
         raise InvalidInput("error.telegram.not_configured")
     response = requests.post(
         API_URL.format(token=settings.token),
-        json={"chat_id": settings.chat_id, "text": text, "disable_web_page_preview": True},
+        json={
+            "chat_id": settings.chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        },
         timeout=SEND_TIMEOUT_SECONDS,
     )
     if response.status_code >= 400:
