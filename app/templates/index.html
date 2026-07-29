@@ -7,19 +7,19 @@
   </div>
   <dl class="watch-facts">
     <div>
-      <dt>Последняя проверка</dt>
-      <dd>{{ stats.last_check|dt }}</dd>
+      <dt>{{ t("watch.last_check") }}</dt>
+      <dd>{{ dt(stats.last_check) }}</dd>
     </div>
     <div>
-      <dt>Следующая</dt>
-      <dd>{{ next_check|dt }}</dd>
+      <dt>{{ t("watch.next_check") }}</dt>
+      <dd>{{ dt(next_check) }}</dd>
     </div>
     <div>
-      <dt>Клиенты</dt>
-      <dd {% if ok_clients < qb_statuses|length %}class="bad-text"{% endif %}>{{ ok_clients }} из {{ qb_statuses|length }} на связи</dd>
+      <dt>{{ t("watch.clients") }}</dt>
+      <dd {% if ok_clients < qb_statuses|length %}class="bad-text"{% endif %}>{{ t("watch.clients_value", ok=ok_clients, total=qb_statuses|length) }}</dd>
     </div>
     <div>
-      <dt>Раздач</dt>
+      <dt>{{ t("watch.torrents") }}</dt>
       <dd>{{ stats.total }}</dd>
     </div>
   </dl>
@@ -28,48 +28,48 @@
 <section class="panel">
   <div class="panel-head">
     <div>
-      <p class="eyebrow">Реестр</p>
-      <h2>Отслеживаемые раздачи</h2>
+      <p class="eyebrow">{{ t("registry.eyebrow") }}</p>
+      <h2>{{ t("registry.title") }}</h2>
     </div>
-    <a class="button primary" href="/add">Добавить раздачу</a>
+    <a class="button primary" href="/add">{{ t("registry.add") }}</a>
   </div>
   <div class="table">
     <div class="row head">
-      <div>Название</div><div>Статус</div><div>Вахта</div><div>Клиент</div><div>Категория</div><div>Проверена</div><div></div>
+      <div>{{ t("table.title") }}</div><div>{{ t("table.status") }}</div><div>{{ t("table.duty") }}</div><div>{{ t("table.client") }}</div><div>{{ t("table.category") }}</div><div>{{ t("table.checked") }}</div><div></div>
     </div>
-    {% for t in torrents %}
-    <div class="row status-row {{ t.status }}">
-      <div data-label="Название">
+    {% for item in torrents %}
+    <div class="row status-row {{ item.status }}">
+      <div data-label="{{ t('table.title') }}">
         <div class="cell-title">
-          <a class="torrent-title" href="/torrents/{{ t.id }}">{{ t.title }}</a>
-          {% if t.auto_update %}<span class="auto-chip" title="Обновление применяется автоматически">авто</span>{% endif %}
+          <a class="torrent-title" href="/torrents/{{ item.id }}">{{ item.title }}</a>
+          {% if item.auto_update %}<span class="auto-chip" title="{{ t('registry.auto_title') }}">{{ t("registry.auto") }}</span>{% endif %}
         </div>
-        {% if t.last_error %}<small class="row-note">{{ t.last_error }}</small>{% endif %}
+        {% if item.last_error %}<small class="row-note">{{ torrent_error(item) }}</small>{% endif %}
       </div>
-      <div data-label="Статус"><span class="status {{ t.status }}">{{ status_label.get(t.status, t.status) }}</span></div>
-      <div data-label="Вахта">
-        {% set strip = duty.get(t.id) %}
+      <div data-label="{{ t('table.status') }}"><span class="status {{ item.status }}">{{ status_label(item.status) }}</span></div>
+      <div data-label="{{ t('table.duty') }}">
+        {% set strip = duty.get(item.id) %}
         {% if strip %}
-        <div class="duty" role="img" aria-label="Последние {{ strip|length }} проверок">
+        <div class="duty" role="img" aria-label="{{ t('registry.duty_aria', count=strip|length) }}">
           {% for tick in strip %}<i class="{{ tick.kind }}" title="{{ tick.title }}"></i>{% endfor %}
         </div>
         {% else %}
-        <span class="duty-empty">—</span>
+        <span class="duty-empty">{{ t("common.dash") }}</span>
         {% endif %}
       </div>
-      <div data-label="Клиент" class="cell-client">{{ t.qb_client.name if t.qb_client else "не задан" }}</div>
-      <div data-label="Категория" class="cell-category">{{ t.category or "—" }}</div>
-      <div data-label="Проверена" class="cell-time">{{ t.last_check_at|dt }}</div>
-      <div data-label="Действия" class="actions">
-        <form method="post" action="/torrents/{{ t.id }}/check"><button>Проверить</button></form>
-        {% if t.status == "update_available" %}
-        <form method="post" action="/torrents/{{ t.id }}/apply-update"><button class="primary">Применить</button></form>
+      <div data-label="{{ t('table.client') }}" class="cell-client">{{ item.qb_client.name if item.qb_client else t("client.unset") }}</div>
+      <div data-label="{{ t('table.category') }}" class="cell-category">{{ item.category or t("common.dash") }}</div>
+      <div data-label="{{ t('table.checked') }}" class="cell-time">{{ dt(item.last_check_at) }}</div>
+      <div data-label="{{ t('table.actions') }}" class="actions">
+        <form method="post" action="/torrents/{{ item.id }}/check"><button>{{ t("registry.check") }}</button></form>
+        {% if item.status == "update_available" %}
+        <form method="post" action="/torrents/{{ item.id }}/apply-update"><button class="primary">{{ t("registry.apply") }}</button></form>
         {% endif %}
-        <a class="button" href="/torrents/{{ t.id }}">Открыть</a>
+        <a class="button" href="/torrents/{{ item.id }}">{{ t("registry.open") }}</a>
       </div>
     </div>
     {% else %}
-    <p class="empty">Пока ничего не отслеживается. Добавьте раздачу — сервис будет сверять её хеш каждый день и покажет, когда выйдет новая версия.</p>
+    <p class="empty">{{ t("registry.empty") }}</p>
     {% endfor %}
   </div>
 </section>

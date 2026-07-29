@@ -42,7 +42,24 @@ def init_db() -> None:
     _ensure_indexes()
     _ensure_qbittorrent_client(models)
     _drop_unused_settings(models)
+    _backfill_message_codes()
     _recover_interrupted_updates(models)
+
+
+def _backfill_message_codes() -> None:
+    """Старые записи журнала переводим на коды, чтобы история читалась на любом языке."""
+    from app.services.message_backfill import backfill
+
+    db = SessionLocal()
+    try:
+        backfill(db)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("message backfill failed")
+        db.rollback()
+    finally:
+        db.close()
 
 
 def _drop_unused_settings(models) -> None:
@@ -69,14 +86,12 @@ def _recover_interrupted_updates(models) -> None:
     db = SessionLocal()
     try:
         stuck = db.query(models.TrackedTorrent).filter(models.TrackedTorrent.status == models.TorrentStatus.updating.value).all()
+        from app.services import messages
+
         for tracked in stuck:
-            tracked.last_error = "Применение обновления прервано перезапуском сервиса. Проверьте раздачу в qBittorrent и повторите."
+            messages.set_error(tracked, "msg.update_interrupted")
             tracked.status = models.TorrentStatus.error.value
-            db.add(models.CheckEvent(
-                tracked_torrent_id=tracked.id,
-                event_type=models.EventType.update_failed.value,
-                message=tracked.last_error,
-            ))
+            db.add(messages.event(tracked.id, models.EventType.update_failed.value, "msg.update_interrupted"))
         if stuck:
             db.commit()
     finally:
@@ -104,6 +119,23 @@ def _migrate_sqlite() -> None:
     if "update_mode" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE tracked_torrents ADD COLUMN update_mode VARCHAR(32) DEFAULT 'new_files_only'"))
+
+    for column, ddl in (
+        ("last_error_code", "ALTER TABLE tracked_torrents ADD COLUMN last_error_code VARCHAR(64)"),
+        ("last_error_params", "ALTER TABLE tracked_torrents ADD COLUMN last_error_params TEXT"),
+    ):
+        if column not in columns:
+            with engine.begin() as conn:
+                conn.execute(text(ddl))
+
+    event_columns = {column["name"] for column in inspector.get_columns("check_events")}
+    for column, ddl in (
+        ("message_code", "ALTER TABLE check_events ADD COLUMN message_code VARCHAR(64)"),
+        ("message_params", "ALTER TABLE check_events ADD COLUMN message_params TEXT"),
+    ):
+        if column not in event_columns:
+            with engine.begin() as conn:
+                conn.execute(text(ddl))
 
     if "qbittorrent_clients" in inspector.get_table_names():
         client_columns = {column["name"] for column in inspector.get_columns("qbittorrent_clients")}

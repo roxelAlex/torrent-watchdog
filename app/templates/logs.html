@@ -3,33 +3,33 @@
 <section class="panel">
   <div class="panel-head">
     <div>
-      <p class="eyebrow">Последние 300 записей</p>
-      <h1>Журнал событий</h1>
+      <p class="eyebrow">{{ t("logs.eyebrow") }}</p>
+      <h1>{{ t("logs.title") }}</h1>
     </div>
   </div>
   <form class="filters" method="get">
     <select name="event_type">
-      <option value="">Все события</option>
-      {% for key, label in event_label.items() %}
-      <option value="{{ key }}" {% if event_type == key %}selected{% endif %}>{{ label }}</option>
+      <option value="">{{ t("logs.all_events") }}</option>
+      {% for option in event_types %}
+      <option value="{{ option.value }}" {% if event_type == option.value %}selected{% endif %}>{{ option.label }}</option>
       {% endfor %}
     </select>
     <select name="tracked_id">
-      <option value="">Все раздачи</option>
-      {% for t in torrents %}<option value="{{ t.id }}" {% if tracked_id == t.id %}selected{% endif %}>{{ t.title }}</option>{% endfor %}
+      <option value="">{{ t("logs.all_torrents") }}</option>
+      {% for item in torrents %}<option value="{{ item.id }}" {% if tracked_id == item.id %}selected{% endif %}>{{ item.title }}</option>{% endfor %}
     </select>
-    <button>Показать</button>
-    {% if event_type or tracked_id %}<a class="button" href="/logs">Сбросить</a>{% endif %}
+    <button>{{ t("logs.show") }}</button>
+    {% if event_type or tracked_id %}<a class="button" href="/logs">{{ t("logs.reset") }}</a>{% endif %}
   </form>
   <div class="events">
     {% for e in events %}
     <div class="event {{ e.event_type }}">
-      <time>{{ e.created_at|dt }}</time>
-      <strong>{{ event_label.get(e.event_type, e.event_type) }}</strong>
-      <span>{{ e.message }}</span>
+      <time>{{ dt(e.created_at) }}</time>
+      <strong>{{ event_label(e.event_type) }}</strong>
+      <span>{{ event_text(e) }}</span>
     </div>
     {% else %}
-    <p class="empty">По этому фильтру записей нет. Снимите фильтр или запустите проверку раздачи.</p>
+    <p class="empty">{{ t("logs.empty") }}</p>
     {% endfor %}
   </div>
 </section>

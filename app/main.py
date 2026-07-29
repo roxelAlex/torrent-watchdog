@@ -50,7 +50,7 @@ app.add_middleware(SessionMiddleware, secret_key=settings.app_secret_key, same_s
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    public_prefixes = ("/static", "/health", "/api/health", "/login")
+    public_prefixes = ("/static", "/health", "/api/health", "/login", "/lang")
     if not settings.app_auth_enabled or request.url.path.startswith(public_prefixes):
         return await call_next(request)
     if is_authenticated(request):

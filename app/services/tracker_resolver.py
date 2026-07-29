@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 import requests
 
 from app.config import get_settings
+from app.errors import InvalidInput
 from app.services.torrent_parser import TorrentMeta, magnet_info_hash, parse_torrent_bytes
 
 
@@ -19,10 +20,7 @@ class ResolvedTorrent:
 
 
 RUTRACKER_TOPIC_RE = re.compile(r"[?&]t=(\d+)")
-RUTRACKER_TOPIC_HINT = (
-    "Нужна ссылка на тему RuTracker вида https://rutracker.org/forum/viewtopic.php?t=123456. "
-    "Magnet и прямые ссылки на .torrent не принимаются."
-)
+
 
 
 def normalize_source_url(source_url: str) -> str:
@@ -34,9 +32,9 @@ def normalize_source_url(source_url: str) -> str:
     """
     url = source_url.strip()
     if not url:
-        raise ValueError(RUTRACKER_TOPIC_HINT)
+        raise InvalidInput("error.source.not_topic")
     if detect_tracker_type(url) != "rutracker" or not RUTRACKER_TOPIC_RE.search(url):
-        raise ValueError(RUTRACKER_TOPIC_HINT)
+        raise InvalidInput("error.source.not_topic")
     return url
 
 
@@ -101,4 +99,4 @@ def resolve_source(source_url: str, tracked_id: int | None = None) -> ResolvedTo
         meta: TorrentMeta = parse_torrent_bytes(response.content)
         path = save_torrent_bytes(response.content, tracked_id, meta.info_hash)
         return ResolvedTorrent(meta.info_hash, meta.name, str(path), source_type, tracker_type)
-    raise ValueError("Для ссылки на страницу нужен поддерживаемый resolver. Сейчас поддержан RuTracker.")
+    raise InvalidInput("error.source.unsupported")

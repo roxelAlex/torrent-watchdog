@@ -3,108 +3,108 @@
 <section class="panel">
   <div class="panel-head">
     <div>
-      <p class="eyebrow">Раздача #{{ t.id }}</p>
-      <h1>{{ t.title }}</h1>
+      <p class="eyebrow">{{ t("detail.eyebrow", id=torrent.id) }}</p>
+      <h1>{{ torrent.title }}</h1>
     </div>
-    <span class="status {{ t.status }}">{{ status_label.get(t.status, t.status) }}</span>
+    <span class="status {{ torrent.status }}">{{ status_label(torrent.status) }}</span>
   </div>
   {% if message %}<div class="alert ok">{{ message }}</div>{% endif %}
   {% if action_error %}<div class="alert error">{{ action_error }}</div>{% endif %}
-  {% if t.last_error %}<div class="alert error">{{ t.last_error }}</div>{% endif %}
-  {% if t.status == "update_available" %}
+  {% if torrent.last_error %}<div class="alert error">{{ torrent_error(torrent) }}</div>{% endif %}
+  {% if torrent.status == "update_available" %}
   <div class="update-banner">
     <div>
-      <strong>Вышла новая версия</strong>
-      <p>{{ version_summary(pending_version, t.update_mode) }}</p>
+      <strong>{{ t("detail.update_banner") }}</strong>
+      <p>{{ version_summary(pending_version, torrent.update_mode) }}</p>
     </div>
-    <form method="post" action="/torrents/{{ t.id }}/apply-update"><button class="primary">Применить обновление</button></form>
+    <form method="post" action="/torrents/{{ torrent.id }}/apply-update"><button class="primary">{{ t("detail.apply") }}</button></form>
   </div>
   {% endif %}
   <div class="quick-facts">
-    <div><span>Клиент</span><strong>{{ t.qb_client.name if t.qb_client else "не задан" }}</strong></div>
-    <div><span>Категория</span><strong>{{ t.category or "без категории" }}</strong></div>
-    <div><span>Как обновлять</span><strong>{{ "только новые файлы" if t.update_mode == "new_files_only" else "полная замена с проверкой" }}</strong></div>
-    <div><span>Автообновление</span><strong>{{ "включено" if t.auto_update else "выключено" }}</strong></div>
+    <div><span>{{ t("detail.client") }}</span><strong>{{ torrent.qb_client.name if torrent.qb_client else t("client.unset") }}</strong></div>
+    <div><span>{{ t("detail.category") }}</span><strong>{{ torrent.category or t("category.unset") }}</strong></div>
+    <div><span>{{ t("detail.update_mode") }}</span><strong>{{ update_mode_label(torrent.update_mode) }}</strong></div>
+    <div><span>{{ t("detail.auto_update") }}</span><strong>{{ t("detail.auto_on") if torrent.auto_update else t("detail.auto_off") }}</strong></div>
   </div>
   <details class="technical">
-    <summary>Технические сведения</summary>
+    <summary>{{ t("detail.technical") }}</summary>
     <dl class="details">
-      <dt>Источник</dt><dd><a href="{{ t.source_url }}">{{ t.source_url }}</a></dd>
-      <dt>Info hash</dt><dd><span class="hash-chip">{{ t.current_info_hash or "—" }}</span></dd>
-      <dt>Hash в qBittorrent</dt><dd><span class="hash-chip">{{ t.current_qb_hash or "—" }}</span></dd>
-      <dt>Папка загрузки</dt><dd class="mono">{{ t.save_path or "—" }}</dd>
-      <dt>Теги</dt><dd class="mono">{{ t.tags or "—" }}</dd>
-      <dt>Последняя проверка</dt><dd class="mono">{{ t.last_check_at|dt }}</dd>
-      <dt>Последнее обновление</dt><dd class="mono">{{ t.last_update_at|dt }}</dd>
+      <dt>{{ t("detail.source") }}</dt><dd><a href="{{ torrent.source_url }}">{{ torrent.source_url }}</a></dd>
+      <dt>{{ t("detail.info_hash") }}</dt><dd><span class="hash-chip">{{ torrent.current_info_hash or t("common.dash") }}</span></dd>
+      <dt>{{ t("detail.qb_hash") }}</dt><dd><span class="hash-chip">{{ torrent.current_qb_hash or t("common.dash") }}</span></dd>
+      <dt>{{ t("detail.save_path") }}</dt><dd class="mono">{{ torrent.save_path or t("common.dash") }}</dd>
+      <dt>{{ t("detail.tags") }}</dt><dd class="mono">{{ torrent.tags or t("common.dash") }}</dd>
+      <dt>{{ t("detail.last_check") }}</dt><dd class="mono">{{ dt(torrent.last_check_at) }}</dd>
+      <dt>{{ t("detail.last_update") }}</dt><dd class="mono">{{ dt(torrent.last_update_at) }}</dd>
     </dl>
   </details>
-  <form class="category-editor" method="post" action="/torrents/{{ t.id }}/category">
+  <form class="category-editor" method="post" action="/torrents/{{ torrent.id }}/category">
     <label>
-      Категория qBittorrent
-      <input name="category" value="{{ t.category }}" list="torrent-categories" placeholder="Без категории">
+      {{ t("detail.category_editor") }}
+      <input name="category" value="{{ torrent.category }}" list="torrent-categories" placeholder="{{ t('detail.category_placeholder') }}">
       <datalist id="torrent-categories">
         {% for category in categories %}
         <option value="{{ category.name }}" label="{{ category.save_path }}"></option>
         {% endfor %}
       </datalist>
     </label>
-    <button type="submit">Сохранить категорию</button>
+    <button type="submit">{{ t("detail.category_save") }}</button>
     {% if categories_error %}
-    <span class="hint">Категории не загрузились: {{ categories_error }}</span>
+    <span class="hint">{{ t("detail.categories_error", error=categories_error) }}</span>
     {% endif %}
   </form>
   <div class="actions block">
-    <form method="post" action="/torrents/{{ t.id }}/check"><button class="primary">Проверить сейчас</button></form>
-    <form method="post" action="/torrents/{{ t.id }}/toggle-auto-update">
-      <button>{{ "Выключить автообновление" if t.auto_update else "Включить автообновление" }}</button>
+    <form method="post" action="/torrents/{{ torrent.id }}/check"><button class="primary">{{ t("detail.check_now") }}</button></form>
+    <form method="post" action="/torrents/{{ torrent.id }}/toggle-auto-update">
+      <button>{{ t("detail.auto_disable") if torrent.auto_update else t("detail.auto_enable") }}</button>
     </form>
-    {% if t.status == "disabled" %}
-    <form method="post" action="/torrents/{{ t.id }}/enable"><button>Возобновить отслеживание</button></form>
+    {% if torrent.status == "disabled" %}
+    <form method="post" action="/torrents/{{ torrent.id }}/enable"><button>{{ t("detail.resume_tracking") }}</button></form>
     {% else %}
-    <form method="post" action="/torrents/{{ t.id }}/disable"><button>Приостановить отслеживание</button></form>
+    <form method="post" action="/torrents/{{ torrent.id }}/disable"><button>{{ t("detail.pause_tracking") }}</button></form>
     {% endif %}
     <span class="spacer"></span>
-    <form method="post" action="/torrents/{{ t.id }}/delete" data-confirm="Убрать раздачу из отслеживания? Торрент и файлы в qBittorrent останутся на месте.">
-      <button class="danger">Убрать из отслеживания</button>
+    <form method="post" action="/torrents/{{ torrent.id }}/delete" data-confirm="{{ t('detail.remove_confirm') }}">
+      <button class="danger">{{ t("detail.remove") }}</button>
     </form>
   </div>
 </section>
 
 <section class="panel">
-  <h2>История версий</h2>
+  <h2>{{ t("detail.versions") }}</h2>
   <div class="table versions">
-    <div class="row head"><div>Версия</div><div>Обнаружена</div><div>Применена</div><div>Текущая</div><div></div></div>
+    <div class="row head"><div>{{ t("detail.version") }}</div><div>{{ t("detail.detected") }}</div><div>{{ t("detail.applied") }}</div><div>{{ t("detail.is_current") }}</div><div></div></div>
     {% for v in versions %}
     <div class="row">
-      <div data-label="Версия">{{ v.torrent_name or "Сохранённая версия" }}</div>
-      <div data-label="Обнаружена" class="cell-time">{{ v.detected_at|dt }}</div>
-      <div data-label="Применена" class="cell-time">{{ v.applied_at|dt }}</div>
-      <div data-label="Текущая">{% if v.is_current %}<span class="status active">текущая</span>{% endif %}</div>
-      <div data-label="Действие" class="actions">
+      <div data-label="{{ t('detail.version') }}">{{ v.torrent_name or t("detail.saved_version") }}</div>
+      <div data-label="{{ t('detail.detected') }}" class="cell-time">{{ dt(v.detected_at) }}</div>
+      <div data-label="{{ t('detail.applied') }}" class="cell-time">{{ dt(v.applied_at) }}</div>
+      <div data-label="{{ t('detail.is_current') }}">{% if v.is_current %}<span class="status active">{{ t("status.current") }}</span>{% endif %}</div>
+      <div data-label="{{ t('detail.action') }}" class="actions">
         {% if not v.is_current and v.torrent_file_path %}
-        <form method="post" action="/torrents/{{ t.id }}/rollback/{{ v.id }}" data-confirm="Вернуть эту версию? Текущий торрент будет заменён, файлы на диске останутся.">
-          <button>Вернуть эту версию</button>
+        <form method="post" action="/torrents/{{ torrent.id }}/rollback/{{ v.id }}" data-confirm="{{ t('detail.rollback_confirm') }}">
+          <button>{{ t("detail.rollback") }}</button>
         </form>
         {% endif %}
       </div>
     </div>
     {% else %}
-    <p class="empty">Версий пока нет.</p>
+    <p class="empty">{{ t("detail.no_versions") }}</p>
     {% endfor %}
   </div>
 </section>
 
 <section class="panel">
-  <h2>Журнал раздачи</h2>
+  <h2>{{ t("detail.journal") }}</h2>
   <div class="events">
     {% for e in events %}
     <div class="event {{ e.event_type }}">
-      <time>{{ e.created_at|dt }}</time>
-      <strong>{{ event_label.get(e.event_type, e.event_type) }}</strong>
-      <span>{{ e.message }}</span>
+      <time>{{ dt(e.created_at) }}</time>
+      <strong>{{ event_label(e.event_type) }}</strong>
+      <span>{{ event_text(e) }}</span>
     </div>
     {% else %}
-    <p class="empty">Событий пока нет.</p>
+    <p class="empty">{{ t("detail.no_events") }}</p>
     {% endfor %}
   </div>
 </section>

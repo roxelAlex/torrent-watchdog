@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.models import CheckEvent, EventType, TorrentStatus, TorrentVersion, TrackedTorrent
+from app.errors import InvalidInput
+from app.models import EventType, TorrentStatus, TorrentVersion, TrackedTorrent
+from app.services import messages
 from app.services.qbittorrent_client import QBittorrentClient
 from app.services.qbittorrent_registry import get_qb_client_config
 from app.services.torrent_diff import build_torrent_diff, diff_to_json
@@ -57,7 +59,7 @@ def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
             qb.resume_torrent(qb_hash)
     except Exception as exc:
         tracked.status = TorrentStatus.error.value
-        tracked.last_error = f"{qb_config.name}: qBittorrent недоступен или отклонил операцию: {exc}"
+        messages.set_error(tracked, "msg.qbittorrent_unavailable", client=qb_config.name, error=str(exc))
         if qb_hash:
             tracked.current_qb_hash = qb_hash
         db.add(TorrentVersion(
@@ -68,11 +70,13 @@ def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
             source_url=source_url,
             is_current=True,
         ))
-        db.add(CheckEvent(
-            tracked_torrent_id=tracked.id,
-            event_type=EventType.qbittorrent_unavailable.value,
-            message=tracked.last_error,
-            new_info_hash=resolved.info_hash,
+        db.add(messages.event(
+            tracked.id,
+            EventType.qbittorrent_unavailable.value,
+            "msg.qbittorrent_unavailable",
+            new_hash=resolved.info_hash,
+            client=qb_config.name,
+            error=str(exc),
         ))
         db.commit()
         db.refresh(tracked)
@@ -91,7 +95,7 @@ def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
         is_current=True,
     )
     db.add(version)
-    db.add(CheckEvent(tracked_torrent_id=tracked.id, event_type=EventType.manual_action.value, message="Раздача добавлена", new_info_hash=resolved.info_hash))
+    db.add(messages.event(tracked.id, EventType.manual_action.value, "msg.torrent_added", new_hash=resolved.info_hash))
     db.commit()
     db.refresh(tracked)
     return tracked
@@ -100,13 +104,13 @@ def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
 def check_torrent(db: Session, tracked_id: int) -> TrackedTorrent:
     tracked = db.get(TrackedTorrent, tracked_id)
     if not tracked:
-        raise ValueError("Раздача не найдена")
+        raise InvalidInput("error.torrent.not_found")
     if tracked.status == TorrentStatus.disabled.value:
         return tracked
 
     old_hash = tracked.current_info_hash
     now = datetime.now(timezone.utc)
-    db.add(CheckEvent(tracked_torrent_id=tracked.id, event_type=EventType.check_started.value, message="Проверка начата", old_info_hash=old_hash))
+    db.add(messages.event(tracked.id, EventType.check_started.value, "msg.check_started", old_hash=old_hash))
     db.commit()
     try:
         resolved = resolve_source(tracked.source_url, tracked_id=tracked.id)
@@ -120,11 +124,11 @@ def check_torrent(db: Session, tracked_id: int) -> TrackedTorrent:
             now.isoformat(),
         )
         tracked.last_check_at = now
-        tracked.last_error = None
+        messages.clear_error(tracked)
         if resolved.info_hash == old_hash:
             if tracked.status in {TorrentStatus.updated.value, TorrentStatus.error.value}:
                 tracked.status = TorrentStatus.active.value
-            db.add(CheckEvent(tracked_torrent_id=tracked.id, event_type=EventType.no_changes.value, message="Изменений нет", old_info_hash=old_hash, new_info_hash=resolved.info_hash))
+            db.add(messages.event(tracked.id, EventType.no_changes.value, "msg.no_changes", old_hash=old_hash, new_hash=resolved.info_hash))
             db.commit()
             db.refresh(tracked)
             return tracked
@@ -148,7 +152,16 @@ def check_torrent(db: Session, tracked_id: int) -> TrackedTorrent:
         tracked.status = TorrentStatus.update_available.value
         db.add(version)
         db.flush()
-        db.add(CheckEvent(tracked_torrent_id=tracked.id, event_type=EventType.update_found.value, message=f"Найдено обновление. {diff.get('summary', '')}", old_info_hash=old_hash, new_info_hash=resolved.info_hash))
+        db.add(messages.event(
+            tracked.id,
+            EventType.update_found.value,
+            "msg.update_found",
+            old_hash=old_hash,
+            new_hash=resolved.info_hash,
+            new=len(diff.get("new", [])),
+            existing=len(diff.get("existing", [])),
+            removed=len(diff.get("removed", [])),
+        ))
         db.commit()
         if tracked.auto_update:
             return apply_update(db, tracked.id, version.id)
@@ -157,9 +170,9 @@ def check_torrent(db: Session, tracked_id: int) -> TrackedTorrent:
     except Exception as exc:
         logger.exception("check failed id=%s url=%s error=%s", tracked.id, mask_url(tracked.source_url), exc)
         tracked.status = TorrentStatus.error.value
-        tracked.last_error = str(exc)
+        messages.set_error(tracked, "msg.raw", error=str(exc))
         tracked.last_check_at = now
-        db.add(CheckEvent(tracked_torrent_id=tracked.id, event_type=EventType.error.value, message=str(exc), old_info_hash=old_hash))
+        db.add(messages.event(tracked.id, EventType.error.value, "msg.raw", old_hash=old_hash, error=str(exc)))
         db.commit()
         return tracked
 

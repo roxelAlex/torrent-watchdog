@@ -18,6 +18,7 @@ import requests
 
 from app.config import get_settings
 from app.db import SessionLocal
+from app.errors import ServiceUnavailable
 from app.models import AppSetting
 from app.services import flaresolverr
 
@@ -34,7 +35,7 @@ _login_lock = threading.Lock()
 _last_attempt_at = 0.0
 
 
-class LoginUnavailable(RuntimeError):
+class LoginUnavailable(ServiceUnavailable):
     """Войти не получилось, и повтор сам по себе не поможет."""
 
 
@@ -83,24 +84,21 @@ def _login_via_browser(login_endpoint: str, username: str, password: str, cookie
         timeout=150,
     )
     if response.status_code >= 500:
-        raise LoginUnavailable(f"FlareSolverr не смог выполнить вход: {response.text.strip()[:200]}")
+        raise LoginUnavailable("error.login.flare_failed", error=response.text.strip()[:200])
     response.raise_for_status()
     payload = response.json()
 
     status = payload.get("status")
     if status == "captcha":
-        raise LoginUnavailable(
-            "RuTracker запросил капчу при входе. Войдите в браузере и вставьте cookie "
-            "на странице «Настройки» — по логину и паролю сейчас не пустит."
-        )
+        raise LoginUnavailable("error.login.captcha")
     if status == "rejected":
-        raise LoginUnavailable("RuTracker не принял логин или пароль. Проверьте их на странице «Настройки».")
+        raise LoginUnavailable("error.login.rejected")
     if status != "ok":
-        raise LoginUnavailable(f"Неожиданный ответ входа: {payload.get('message') or status}")
+        raise LoginUnavailable("error.login.unexpected", error=payload.get("message") or status)
 
     fresh_cookie = flaresolverr.cookie_header(payload.get("cookies") or [])
     if not has_auth_cookie(fresh_cookie):
-        raise LoginUnavailable("Вход прошёл, но трекер не выдал cookie сессии.")
+        raise LoginUnavailable("error.login.no_cookie")
     return fresh_cookie
 
 
@@ -120,13 +118,10 @@ def refresh_cookie(
     global _last_attempt_at
 
     if not username or not password:
-        raise LoginUnavailable("Логин и пароль RuTracker не заданы — вход по ним невозможен.")
+        raise LoginUnavailable("error.login.no_credentials")
     login_endpoint = flaresolverr.extended_url(endpoint, "/login")
     if not login_endpoint:
-        raise LoginUnavailable(
-            "Вход по логину и паролю работает только через собственный FlareSolverr из этого compose-файла "
-            "(адрес http://flaresolverr). Для стороннего FlareSolverr вставьте cookie вручную."
-        )
+        raise LoginUnavailable("error.login.needs_own_flaresolverr")
 
     with _login_lock:
         saved = stored_cookie()
@@ -137,10 +132,7 @@ def refresh_cookie(
         interval = get_settings().rutracker_login_min_interval_seconds
         waited = time.monotonic() - _last_attempt_at
         if not force and _last_attempt_at and waited < interval:
-            raise LoginUnavailable(
-                f"Повторный вход на RuTracker возможен через {int(interval - waited)} с. "
-                "Так сервис не долбит трекер при неверном пароле."
-            )
+            raise LoginUnavailable("error.login.too_soon", seconds=int(interval - waited))
         _last_attempt_at = time.monotonic()
 
         logger.info("rutracker login attempt user=%s", username)

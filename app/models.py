@@ -61,7 +61,12 @@ class TrackedTorrent(Base):
     status: Mapped[str] = mapped_column(String(32), default=TorrentStatus.active.value)
     last_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_update_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Текст ошибки хранится ключом и параметрами, чтобы показывать его на языке
+    # читателя, а не на том, который был выбран в момент сбоя. last_error —
+    # готовый текст для записей, сделанных до появления переводов.
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_error_params: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -117,6 +122,8 @@ class CheckEvent(Base):
     tracked_torrent_id: Mapped[int | None] = mapped_column(ForeignKey("tracked_torrents.id", ondelete="CASCADE"), nullable=True)
     event_type: Mapped[str] = mapped_column(String(32), index=True)
     message: Mapped[str] = mapped_column(Text, default="")
+    message_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    message_params: Mapped[str | None] = mapped_column(Text, nullable=True)
     old_info_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     new_info_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

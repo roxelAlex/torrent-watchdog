@@ -6,10 +6,10 @@
 <section class="panel">
   <div class="panel-head">
     <div>
-      <p class="eyebrow">Куда добавлять торренты</p>
-      <h1>Клиенты qBittorrent</h1>
+      <p class="eyebrow">{{ t("settings.qb_eyebrow") }}</p>
+      <h1>{{ t("settings.qb_title") }}</h1>
     </div>
-    <form method="post" action="/settings/test-qbittorrent"><button>Проверить всех</button></form>
+    <form method="post" action="/settings/test-qbittorrent"><button>{{ t("settings.qb_test") }}</button></form>
   </div>
   <div class="client-grid">
     {% for client in qb_clients %}
@@ -17,23 +17,23 @@
     {% set online = status and status.status == "ok" %}
     <div class="client-card {{ 'ok' if online else 'bad' }}">
       <div>
-        <span class="beacon {{ 'active' if online else 'error' }}" role="img" aria-label="{{ 'на связи' if online else 'нет связи' }}"></span>
+        <span class="beacon {{ 'active' if online else 'error' }}" role="img" aria-label="{{ t('settings.qb_online') if online else t('settings.qb_offline') }}"></span>
         <strong>{{ client.name }}</strong>
       </div>
       <span>{{ client.host }}</span>
       <small {% if not online %}class="bad-text"{% endif %}>
-        {% if online %}на связи{% if status.version %} · {{ status.version }}{% endif %}{% else %}нет связи{% endif %}
+        {% if online %}{{ t("settings.qb_online") }}{% if status.version %} · {{ status.version }}{% endif %}{% else %}{{ t("settings.qb_offline") }}{% endif %}
       </small>
       <details class="mini-edit">
-        <summary>Изменить</summary>
+        <summary>{{ t("settings.qb_edit") }}</summary>
         <form class="form compact" method="post" action="/settings/qbittorrent/{{ client.id }}">
-          <label>Название<input name="name" value="{{ client.name }}" required></label>
-          <label>Адрес<input name="host" value="{{ client.host }}" required></label>
-          <label>Логин<input name="username" value="{{ client.username }}"></label>
-          <label>Новый пароль<input name="password" type="password" placeholder="Пусто — пароль не меняется"></label>
-          <label>Таймаут, сек<input name="timeout_seconds" type="number" min="3" value="{{ client.timeout_seconds }}"></label>
-          <label class="check"><input type="checkbox" name="verify_tls" {% if client.verify_tls %}checked{% endif %}> Проверять TLS-сертификат</label>
-          <button>Сохранить клиент</button>
+          <label>{{ t("settings.qb_name") }}<input name="name" value="{{ client.name }}" required></label>
+          <label>{{ t("settings.qb_host") }}<input name="host" value="{{ client.host }}" required></label>
+          <label>{{ t("settings.qb_username") }}<input name="username" value="{{ client.username }}"></label>
+          <label>{{ t("settings.qb_new_password") }}<input name="password" type="password" placeholder="{{ t('settings.qb_password_keep') }}"></label>
+          <label>{{ t("settings.qb_timeout") }}<input name="timeout_seconds" type="number" min="3" value="{{ client.timeout_seconds }}"></label>
+          <label class="check"><input type="checkbox" name="verify_tls" {% if client.verify_tls %}checked{% endif %}> {{ t("settings.qb_verify_tls") }}</label>
+          <button>{{ t("settings.qb_save") }}</button>
         </form>
       </details>
     </div>
@@ -41,15 +41,15 @@
   </div>
 
   <details class="technical add-client">
-    <summary>Добавить клиент</summary>
+    <summary>{{ t("settings.qb_add") }}</summary>
     <form class="form" method="post" action="/settings/qbittorrent">
-      <label>Название<input name="name" required placeholder="Домашний сервер"></label>
-      <label>Адрес<input name="host" required placeholder="http://192.168.1.154:8080"></label>
-      <label>Логин<input name="username"></label>
-      <label>Пароль<input name="password" type="password"></label>
-      <label>Таймаут, сек<input name="timeout_seconds" type="number" min="3" value="30"></label>
-      <label class="check"><input type="checkbox" name="verify_tls"> Проверять TLS-сертификат</label>
-      <button class="primary">Добавить клиент</button>
+      <label>{{ t("settings.qb_name") }}<input name="name" required placeholder="qBittorrent"></label>
+      <label>{{ t("settings.qb_host") }}<input name="host" required placeholder="http://192.168.1.154:8080"></label>
+      <label>{{ t("settings.qb_username") }}<input name="username"></label>
+      <label>{{ t("settings.qb_password") }}<input name="password" type="password"></label>
+      <label>{{ t("settings.qb_timeout") }}<input name="timeout_seconds" type="number" min="3" value="30"></label>
+      <label class="check"><input type="checkbox" name="verify_tls"> {{ t("settings.qb_verify_tls") }}</label>
+      <button class="primary">{{ t("settings.qb_add") }}</button>
     </form>
   </details>
 </section>
@@ -57,40 +57,40 @@
 <section class="panel narrow">
   <div class="panel-head">
     <div>
-      <p class="eyebrow">Доступ к трекеру</p>
-      <h2>RuTracker</h2>
+      <p class="eyebrow">{{ t("settings.tracker_eyebrow") }}</p>
+      <h2>{{ t("settings.tracker_title") }}</h2>
     </div>
-    <form method="post" action="/settings/test-rutracker"><button>Проверить вход</button></form>
+    <form method="post" action="/settings/test-rutracker"><button>{{ t("settings.tracker_test") }}</button></form>
   </div>
   <form class="form" method="post" action="/settings">
-    <label>Логин<input name="rutracker_username" value="{{ saved.rutracker_username or "" }}" autocomplete="off"></label>
-    <label>Пароль
+    <label>{{ t("settings.tracker_username") }}<input name="rutracker_username" value="{{ saved.rutracker_username or "" }}" autocomplete="off"></label>
+    <label>{{ t("settings.tracker_password") }}
       <input name="rutracker_password" type="password" autocomplete="new-password"
-             placeholder="{{ "сохранён — оставьте пустым, чтобы не менять" if saved.rutracker_password else "не задан" }}">
+             placeholder="{{ t('settings.tracker_password_saved') if saved.rutracker_password else t('settings.tracker_password_unset') }}">
     </label>
-    <div class="hint">С логином и паролем сервис входит на трекер сам и обновляет cookie, когда сессия истекает. Пароль хранится в базе открытым текстом — как и пароли qBittorrent.</div>
+    <div class="hint">{{ t("settings.tracker_hint") }}</div>
     <details class="technical">
-      <summary>Cookie вручную</summary>
-      <label>Cookies RuTracker
+      <summary>{{ t("settings.cookie_summary") }}</summary>
+      <label>{{ t("settings.cookie_label") }}
         <textarea name="rutracker_cookie" rows="4" placeholder="bb_session=...; bb_data=...">{{ saved.rutracker_cookie or "" }}</textarea>
       </label>
-      <div class="hint">Нужна строка Cookie авторизованной сессии целиком. Одного <code>cf_clearance</code> мало — в строке должны быть <code>bb_session</code>, <code>bb_data</code> или <code>bb_t</code>. Здесь же появится cookie, полученный автоматическим входом. Заполнять вручную нужно, только если трекер запросил капчу: её не пройти ни логином, ни паролем.</div>
+      <div class="hint">{{ t("settings.cookie_hint") | safe }}</div>
     </details>
-    <label>Адрес FlareSolverr<input name="flaresolver_address" placeholder="http://flaresolverr" value="{{ saved.flaresolver_address or settings.flaresolver_address }}"></label>
-    <label>Порт FlareSolverr<input name="flaresolver_port" type="number" min="1" max="65535" value="{{ saved.flaresolver_port or settings.flaresolver_port }}"></label>
-    <div class="hint">FlareSolverr обходит проверку Cloudflare. Оставьте адрес пустым, чтобы скачивать напрямую.</div>
-    <button class="primary">Сохранить настройки</button>
+    <label>{{ t("settings.flare_address") }}<input name="flaresolver_address" placeholder="http://flaresolverr" value="{{ saved.flaresolver_address or settings.flaresolver_address }}"></label>
+    <label>{{ t("settings.flare_port") }}<input name="flaresolver_port" type="number" min="1" max="65535" value="{{ saved.flaresolver_port or settings.flaresolver_port }}"></label>
+    <div class="hint">{{ t("settings.flare_hint") }}</div>
+    <button class="primary">{{ t("settings.save") }}</button>
   </form>
 </section>
 
 <section class="panel narrow">
-  <h2>Расписание</h2>
+  <h2>{{ t("settings.schedule") }}</h2>
   <dl class="details">
-    <dt>Проверка запускается</dt>
-    <dd class="mono">каждый день в {{ "%02d"|format(settings.check_hour) }}:{{ "%02d"|format(settings.check_minute) }}</dd>
-    <dt>Часовой пояс</dt>
+    <dt>{{ t("settings.schedule_runs") }}</dt>
+    <dd class="mono">{{ t("settings.schedule_daily", time="%02d:%02d"|format(settings.check_hour, settings.check_minute)) }}</dd>
+    <dt>{{ t("settings.timezone") }}</dt>
     <dd class="mono">{{ settings.tz }}</dd>
   </dl>
-  <div class="hint">Время задаётся переменными <code>CHECK_HOUR</code> и <code>CHECK_MINUTE</code> в <code>.env</code> и применяется при перезапуске контейнера. Проверить раздачу вне расписания можно кнопкой «Проверить» в реестре.</div>
+  <div class="hint">{{ t("settings.schedule_hint") | safe }}</div>
 </section>
 {% endblock %}

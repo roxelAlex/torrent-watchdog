@@ -2,7 +2,10 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from app.models import CheckEvent, EventType, TrackedTorrent
+from app.errors import InvalidInput, ServiceUnavailable
+from app.i18n import translate
+from app.models import EventType, TrackedTorrent
+from app.services import messages
 from app.services.qbittorrent_client import QBittorrentClient
 from app.services.qbittorrent_registry import get_qb_client_config
 
@@ -12,32 +15,29 @@ logger = logging.getLogger(__name__)
 def change_torrent_category(db: Session, tracked_id: int, category: str) -> TrackedTorrent:
     tracked = db.get(TrackedTorrent, tracked_id)
     if not tracked:
-        raise ValueError("Раздача не найдена")
+        raise InvalidInput("error.torrent.not_found")
     if not tracked.current_qb_hash:
-        raise RuntimeError("У раздачи нет связанного торрента в qBittorrent")
+        raise InvalidInput("error.torrent.no_qb_hash")
 
     normalized_category = category.strip()
     qb_config = get_qb_client_config(db, tracked.qb_client_id)
     qb = QBittorrentClient(qb_config)
     qb.login()
     if not qb.get_torrent(tracked.current_qb_hash):
-        raise RuntimeError(f"Торрент не найден в клиенте «{qb_config.name}»")
+        raise ServiceUnavailable("error.torrent.not_in_client", client=qb_config.name)
 
     qb.set_category(tracked.current_qb_hash, normalized_category)
     old_category = tracked.category
     tracked.category = normalized_category
-    db.add(
-        CheckEvent(
-            tracked_torrent_id=tracked.id,
-            event_type=EventType.manual_action.value,
-            message=(
-                f"Категория изменена: «{old_category or 'без категории'}» → "
-                f"«{normalized_category or 'без категории'}»."
-            ),
-            old_info_hash=tracked.current_info_hash,
-            new_info_hash=tracked.current_info_hash,
-        )
-    )
+    db.add(messages.event(
+        tracked.id,
+        EventType.manual_action.value,
+        "msg.category_changed",
+        old_hash=tracked.current_info_hash,
+        new_hash=tracked.current_info_hash,
+        old=old_category or translate("category.unset"),
+        new=normalized_category or translate("category.unset"),
+    ))
     db.commit()
     db.refresh(tracked)
     logger.info(

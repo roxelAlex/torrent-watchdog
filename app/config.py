@@ -6,10 +6,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "torrent-watchdog"
-    app_version: str = "0.5.0"
+    app_version: str = "0.6.0"
     app_host: str = "0.0.0.0"
     app_port: int = 8096
     tz: str = "Asia/Yekaterinburg"
+    # Язык по умолчанию; переключатель в шапке запоминает выбор в cookie.
+    app_language: str = "ru"
 
     database_url: str = "sqlite:////data/app.db"
     data_dir: Path = Path("/data")

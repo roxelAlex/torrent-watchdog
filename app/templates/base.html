@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="{{ lang }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,11 +12,25 @@
   <header class="topbar">
     <a class="brand" href="/"><span class="brand-mark">tw</span><span>torrent-watchdog</span></a>
     <nav>
-      <a href="/" {% if path == "/" %}class="on"{% endif %}>Раздачи</a>
-      <a href="/add" {% if path == "/add" %}class="on"{% endif %}>Добавить</a>
-      <a href="/settings" {% if path == "/settings" %}class="on"{% endif %}>Настройки</a>
-      <a href="/logs" {% if path == "/logs" %}class="on"{% endif %}>Журнал</a>
-      <form method="post" action="/logout" class="logout"><button>Выйти</button></form>
+      <a href="/" {% if path == "/" %}class="on"{% endif %}>{{ t("nav.torrents") }}</a>
+      <a href="/add" {% if path == "/add" %}class="on"{% endif %}>{{ t("nav.add") }}</a>
+      <a href="/settings" {% if path == "/settings" %}class="on"{% endif %}>{{ t("nav.settings") }}</a>
+      <a href="/logs" {% if path == "/logs" %}class="on"{% endif %}>{{ t("nav.journal") }}</a>
+      <details class="lang-picker">
+        <summary title="{{ t('nav.language') }}" aria-label="{{ t('nav.language') }}">
+          <span class="flag">{{ language_flag }}</span><span class="code">{{ lang }}</span>
+        </summary>
+        <div class="lang-menu">
+          {% for option in languages %}
+          <a href="/lang/{{ option.code }}?next={{ request.url.path | urlencode }}"
+             lang="{{ option.code }}"
+             {% if option.code == lang %}class="on" aria-current="true"{% endif %}>
+            <span class="flag">{{ option.flag }}</span><span class="code">{{ option.code }}</span><span class="name">{{ option.name }}</span>
+          </a>
+          {% endfor %}
+        </div>
+      </details>
+      <form method="post" action="/logout" class="logout"><button>{{ t("nav.logout") }}</button></form>
     </nav>
   </header>
   <main class="container">

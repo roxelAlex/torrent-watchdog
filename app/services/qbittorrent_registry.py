@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.errors import InvalidInput
 from app.models import QbittorrentClientConfig
 from app.services.cache import TTLCache
 from app.services.qbittorrent_client import QBittorrentClient
@@ -84,7 +85,7 @@ def update_qb_client(
 ) -> QbittorrentClientConfig:
     client = db.get(QbittorrentClientConfig, client_id)
     if not client:
-        raise ValueError("Клиент qBittorrent не найден")
+        raise InvalidInput("error.qb.client_not_found")
     client.name = name.strip() or client.name
     client.host = host.rstrip("/")
     client.username = username

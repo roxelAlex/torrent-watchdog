@@ -7,7 +7,9 @@ import requests
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from app.models import CheckEvent, EventType, TorrentStatus, TorrentVersion, TrackedTorrent
+from app.errors import InvalidInput, ServiceUnavailable, localize
+from app.models import EventType, TorrentStatus, TorrentVersion, TrackedTorrent
+from app.services import messages
 from app.services.qbittorrent_client import QBittorrentClient
 from app.services.qbittorrent_registry import get_qb_client_config
 from app.services.torrent_diff import build_torrent_diff, diff_from_json, existing_file_keys
@@ -15,8 +17,8 @@ from app.services.torrent_diff import build_torrent_diff, diff_from_json, existi
 logger = logging.getLogger(__name__)
 
 
-def _event(db: Session, tracked_id: int, event_type: EventType, message: str, old_hash: str | None, new_hash: str | None) -> None:
-    db.add(CheckEvent(tracked_torrent_id=tracked_id, event_type=event_type.value, message=message, old_info_hash=old_hash, new_info_hash=new_hash))
+def _event(db: Session, tracked_id: int, event_type: EventType, code: str, old_hash: str | None, new_hash: str | None, **params) -> None:
+    db.add(messages.event(tracked_id, event_type.value, code, old_hash=old_hash, new_hash=new_hash, **params))
 
 
 def _wait_for_qb_files(
@@ -47,9 +49,8 @@ def _wait_for_qb_files(
             time.sleep(delay_seconds)
 
     timeout_seconds = attempts * delay_seconds
-    raise RuntimeError(
-        f"qBittorrent не предоставил список файлов для нового торрента "
-        f"{torrent_hash} за {timeout_seconds:g} секунд"
+    raise ServiceUnavailable(
+        "error.qb.files_timeout", hash=torrent_hash, seconds=f"{timeout_seconds:g}"
     ) from last_error
 
 
@@ -101,23 +102,24 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
     tracked = db.get(TrackedTorrent, tracked_id)
     version = db.get(TorrentVersion, version_id)
     if not tracked or not version or version.tracked_torrent_id != tracked_id:
-        raise ValueError("Раздача или версия не найдена")
+        raise InvalidInput("error.torrent.or_version_not_found")
 
     old_hash = tracked.current_info_hash
     try:
         tracked.status = TorrentStatus.updating.value
-        tracked.last_error = None
+        messages.clear_error(tracked)
         db.commit()
 
         if not version.torrent_file_path or not Path(version.torrent_file_path).exists():
-            raise RuntimeError("Сохранённый .torrent файл не найден")
+            raise InvalidInput("error.version.file_missing")
 
         qb_config = get_qb_client_config(db, tracked.qb_client_id)
         qb = QBittorrentClient(qb_config)
         qb_status = qb.test_connection()
         if qb_status.get("status") != "ok":
-            _event(db, tracked_id, EventType.qbittorrent_unavailable, f"{qb_config.name}: qBittorrent недоступен: {qb_status.get('error')}", old_hash, version.info_hash)
-            raise RuntimeError(f"{qb_config.name}: qBittorrent недоступен: {qb_status.get('error')}")
+            _event(db, tracked_id, EventType.qbittorrent_unavailable, "error.qb.unavailable", old_hash, version.info_hash,
+                   client=qb_config.name, error=qb_status.get("error"))
+            raise ServiceUnavailable("error.qb.unavailable", client=qb_config.name, error=qb_status.get("error"))
         qb.login()
         if tracked.current_qb_hash and tracked.current_qb_hash.lower() != version.info_hash.lower():
             logger.info("pause old torrent id=%s hash=%s", tracked.id, tracked.current_qb_hash)
@@ -171,38 +173,29 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
         tracked.current_torrent_name = version.torrent_name
         tracked.status = TorrentStatus.updated.value
         tracked.last_update_at = datetime.now(timezone.utc)
-        tracked.last_error = None
+        messages.clear_error(tracked)
         if comparison_failed:
-            message = (
-                "Обновление применено, но сравнить состав файлов с прошлой версией не удалось: "
-                "её сохранённый .torrent недоступен. Приоритеты файлов не выставлялись, вместо этого "
-                "запущен recheck — qBittorrent сверит уже скачанное. Файлы на диске не удалялись."
-            )
+            code, params = "msg.update_applied.no_comparison", {}
         elif priorities:
-            skipped, selected = priorities
-            message = f"Обновление применено в режиме только новых файлов: старых файлов отключено {skipped}, к скачиванию выбрано {selected}. Recheck не запускался."
+            code = "msg.update_applied.new_files_only"
+            params = {"skipped": priorities[0], "selected": priorities[1]}
         else:
-            message = "Обновление применено. Файлы на диске не удалялись."
-        _event(db, tracked_id, EventType.update_applied, message, old_hash, version.info_hash)
+            code, params = "msg.update_applied.full", {}
+        _event(db, tracked_id, EventType.update_applied, code, old_hash, version.info_hash, **params)
         db.commit()
         db.refresh(tracked)
         return tracked
     except Exception as exc:
         logger.exception("update failed id=%s step=apply_update error=%s", tracked_id, exc)
         tracked.status = TorrentStatus.error.value
-        tracked.last_error = str(exc)
-        _event(db, tracked_id, EventType.update_failed, f"Ошибка применения: {exc}", old_hash, version.info_hash if version else None)
+        messages.set_error(tracked, "msg.update_failed", error=localize(exc, None))
+        _event(db, tracked_id, EventType.update_failed, "msg.update_failed", old_hash, version.info_hash if version else None, error=localize(exc, None))
         db.commit()
         raise
 
 
 def rollback_to_version(db: Session, tracked_id: int, version_id: int) -> TrackedTorrent:
     tracked = apply_update(db, tracked_id, version_id)
-    db.add(CheckEvent(
-        tracked_torrent_id=tracked_id,
-        event_type=EventType.manual_action.value,
-        message="Выполнен откат на сохранённую версию. Файлы на диске не удалялись.",
-        new_info_hash=tracked.current_info_hash,
-    ))
+    db.add(messages.event(tracked_id, EventType.manual_action.value, "msg.rollback", new_hash=tracked.current_info_hash))
     db.commit()
     return tracked

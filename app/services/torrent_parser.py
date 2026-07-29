@@ -5,6 +5,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import bencodepy
 
+from app.errors import InvalidInput
+
 
 @dataclass(frozen=True)
 class TorrentMeta:
@@ -74,4 +76,4 @@ def magnet_info_hash(magnet_url: str) -> str:
         value = unquote(value)
         if value.startswith("urn:btih:"):
             return value.rsplit(":", 1)[-1].lower()
-    raise ValueError("Magnet-ссылка не содержит xt=urn:btih")
+    raise InvalidInput("error.magnet.no_btih")

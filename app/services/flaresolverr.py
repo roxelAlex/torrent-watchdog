@@ -6,6 +6,9 @@
 
 import requests
 
+from app.errors import InvalidInput, ServiceUnavailable
+from app.i18n import translate
+
 from urllib.parse import urlsplit, urlunsplit
 
 # Скачивание и вход браузером — это собственные endpoints нашего образа
@@ -23,18 +26,18 @@ def endpoint_url(address: str, port: str) -> str | None:
 
     parsed = urlsplit(address)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise ValueError("Адрес FlareSolverr должен начинаться с http:// или https://")
+        raise InvalidInput("error.flare.scheme")
     try:
         configured_port = int(port)
     except ValueError as exc:
-        raise ValueError("Порт FlareSolverr должен быть числом от 1 до 65535") from exc
+        raise InvalidInput("error.flare.port") from exc
     if not 1 <= configured_port <= 65535:
-        raise ValueError("Порт FlareSolverr должен быть числом от 1 до 65535")
+        raise InvalidInput("error.flare.port")
 
     try:
         has_port = parsed.port is not None
     except ValueError as exc:
-        raise ValueError("Порт в адресе FlareSolverr указан неверно") from exc
+        raise InvalidInput("error.flare.port_in_address") from exc
     netloc = parsed.netloc if has_port else f"{parsed.netloc}:{configured_port}"
     return f"{urlunsplit((parsed.scheme, netloc, parsed.path, '', '')).rstrip('/')}/v1"
 
@@ -78,9 +81,9 @@ def call(endpoint: str, payload: dict[str, object], timeout: int = 65) -> dict[s
     try:
         payload = response.json()
     except ValueError as exc:
-        raise RuntimeError("FlareSolverr вернул некорректный ответ") from exc
+        raise ServiceUnavailable("error.flare.bad_response") from exc
     if payload.get("status") != "ok":
-        raise RuntimeError(f"FlareSolverr не обработал запрос: {payload.get('message') or 'неизвестная ошибка'}")
+        raise ServiceUnavailable("error.flare.rejected", error=payload.get("message") or translate("error.flare.unknown"))
     return payload
 
 
@@ -97,7 +100,7 @@ def solve(endpoint: str, source_url: str, cookie: str, fallback_user_agent: str)
     )
     solution = payload.get("solution")
     if not isinstance(solution, dict):
-        raise RuntimeError("FlareSolverr не вернул решение")
+        raise ServiceUnavailable("error.flare.no_solution")
 
     cookies = {item["name"]: item["value"] for item in cookies_from_header(cookie)}
     for item in solution.get("cookies") or []:

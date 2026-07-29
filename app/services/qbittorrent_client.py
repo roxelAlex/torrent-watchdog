@@ -5,6 +5,7 @@ import logging
 import requests
 
 from app.config import get_settings
+from app.errors import ServiceUnavailable
 from app.models import QbittorrentClientConfig
 from app.utils import mask_url
 
@@ -38,7 +39,7 @@ class QBittorrentClient:
         if response.status_code == 204 and any(name.startswith("QBT_SID") for name in self.session.cookies.keys()):
             return
         if response.text.strip() != "Ok.":
-            raise RuntimeError("qBittorrent отклонил логин")
+            raise ServiceUnavailable("error.qb.login_rejected")
 
     def test_connection(self) -> dict[str, str]:
         """Один запрос версии; логин только если клиент его потребовал."""
@@ -72,7 +73,7 @@ class QBittorrentClient:
                     raise
         if last_error:
             raise last_error
-        raise RuntimeError("Не задан endpoint qBittorrent")
+        raise ServiceUnavailable("error.qb.no_endpoint")
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> requests.Response:
         response = self.session.get(self._url(path), params=params or {}, timeout=self.timeout, verify=self.verify_tls)

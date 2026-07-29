@@ -22,7 +22,9 @@ from app.services.qbittorrent_registry import (
     list_qb_clients,
     update_qb_client,
 )
-from app.services import flaresolverr, rutracker_auth
+from app import i18n
+from app.errors import localize
+from app.services import flaresolverr, messages, rutracker_auth
 from app.services.torrent_settings import change_torrent_category
 from app.services.update_applier import apply_update, rollback_to_version
 from app.services.update_checker import check_torrent, create_initial_torrent, latest_pending_version
@@ -32,24 +34,8 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["app_version"] = get_settings().app_version
 templates.env.globals["app_name"] = get_settings().app_name
-STATUS_LABEL = {
-    "active": "активна",
-    "update_available": "найдено обновление",
-    "updating": "обновляется",
-    "updated": "обновлено",
-    "error": "ошибка",
-    "disabled": "отключена",
-}
-EVENT_LABEL = {
-    "check_started": "проверка начата",
-    "no_changes": "без изменений",
-    "update_found": "обновление найдено",
-    "update_applied": "обновление применено",
-    "update_failed": "ошибка обновления",
-    "manual_action": "ручное действие",
-    "error": "ошибка",
-    "qbittorrent_unavailable": "qBittorrent недоступен",
-}
+
+LANGUAGE_COOKIE = "lang"
 DUTY_OUTCOMES = {
     "no_changes": "ok",
     "update_applied": "applied",
@@ -58,20 +44,21 @@ DUTY_OUTCOMES = {
     "error": "bad",
     "qbittorrent_unavailable": "bad",
 }
-templates.env.globals["status_label"] = STATUS_LABEL
-templates.env.globals["event_label"] = EVENT_LABEL
 
 
-def _fmt_dt(value) -> str:
+def current_language(request: Request) -> str:
+    return i18n.normalize(request.cookies.get(LANGUAGE_COOKIE) or get_settings().app_language)
+
+
+def _fmt_dt(value, language: str) -> str:
     if not value:
-        return "нет"
-    settings = get_settings()
+        return i18n.translate("common.none", language)
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(ZoneInfo(settings.tz)).strftime("%d.%m.%Y %H:%M")
+    return value.astimezone(ZoneInfo(get_settings().tz)).strftime(i18n.date_format(language))
 
 
-def _version_summary(version: TorrentVersion | None, update_mode: str = "new_files_only") -> str:
+def _version_summary(version: TorrentVersion | None, update_mode: str, language: str) -> str:
     """Итог зависит от режима: обещать «не будет перекачиваться» можно только для new_files_only."""
     if not version:
         return ""
@@ -80,20 +67,60 @@ def _version_summary(version: TorrentVersion | None, update_mode: str = "new_fil
     existing_count = len(diff.get("existing", []))
     if update_mode != "new_files_only":
         if new_count:
-            return f"Новых файлов: {new_count}, уже имеющихся: {existing_count}. Раздача будет заменена целиком, qBittorrent сверит файлы на диске."
-        return "Раздача будет заменена целиком, qBittorrent сверит файлы на диске."
+            return i18n.translate("summary.full", language, new=new_count, existing=existing_count)
+        return i18n.translate("summary.full.no_new", language)
     if not diff or diff.get("mode") == "unknown":
-        return "Сравнить состав файлов с прошлой версией не удалось: её сохранённый .torrent недоступен. Вместо пропуска старых файлов будет запущен recheck."
+        return i18n.translate("summary.no_comparison", language)
     if new_count:
-        return f"Новых файлов: {new_count}. Уже имеющиеся файлы не будут перекачиваться: {existing_count}."
-    return "Состав раздачи изменился, новых файлов по списку не найдено."
+        return i18n.translate("summary.new_files_only", language, new=new_count, existing=existing_count)
+    return i18n.translate("summary.new_files_only.no_new", language)
 
 
-templates.env.filters["dt"] = _fmt_dt
-templates.env.globals["version_summary"] = _version_summary
+def render(request: Request, template: str, context: dict, status_code: int = 200):
+    """Единственная точка рендера: язык подставляется здесь, а не в каждом роуте."""
+    language = current_language(request)
+
+    def translate(key: str, **params):
+        return i18n.translate(key, language, **params)
+
+    return templates.TemplateResponse(
+        template,
+        {
+            "request": request,
+            "lang": language,
+            "languages": i18n.language_options(),
+            "language_flag": i18n.flag(language),
+            "t": translate,
+            "dt": lambda value: _fmt_dt(value, language),
+            "status_label": lambda status: i18n.translate(f"status.{status}", language),
+            "event_label": lambda event_type: i18n.translate(f"event.{event_type}", language),
+            "event_text": lambda item: messages.render_event(item, language),
+            "torrent_error": lambda tracked: messages.render_torrent_error(tracked, language),
+            "version_summary": lambda version, mode: _version_summary(version, mode, language),
+            "update_mode_label": lambda mode: i18n.translate(f"mode.{mode}", language),
+            **context,
+        },
+        status_code=status_code,
+    )
 
 
-def _duty_strips(db: Session, tracked_ids: list[int], limit: int = 14) -> dict[int, list[dict[str, str]]]:
+def event_type_options(language: str) -> list[dict[str, str]]:
+    return [{"value": code, "label": i18n.translate(f"event.{code}", language)} for code in DUTY_OUTCOMES_ORDER]
+
+
+DUTY_OUTCOMES_ORDER = (
+    "check_started",
+    "no_changes",
+    "update_found",
+    "update_applied",
+    "update_failed",
+    "manual_action",
+    "error",
+    "qbittorrent_unavailable",
+)
+
+
+def _duty_strips(db: Session, tracked_ids: list[int], language: str, limit: int = 14) -> dict[int, list[dict[str, str]]]:
     """Последние исходы проверок для полосок вахты — одним запросом на весь реестр."""
     if not tracked_ids:
         return {}
@@ -122,34 +149,24 @@ def _duty_strips(db: Session, tracked_ids: list[int], limit: int = 14) -> dict[i
     for tracked_id, event_type, created_at in rows:
         strips[tracked_id].append({
             "kind": DUTY_OUTCOMES[event_type],
-            "title": f"{_fmt_dt(created_at)} — {EVENT_LABEL.get(event_type, event_type)}",
+            "title": f"{_fmt_dt(created_at, language)} — {i18n.translate(f'event.{event_type}', language)}",
         })
     return strips
 
 
-def _watch_state(stats: dict) -> dict[str, str]:
+def _watch_state(stats: dict, language: str) -> dict[str, str]:
     if not stats["total"]:
-        return {
-            "tone": "disabled",
-            "headline": "Вахта пустая",
-            "note": "Добавьте первую раздачу — сервис начнёт сверять её хеш каждый день.",
-        }
-    if stats["errors"]:
-        return {
-            "tone": "error",
-            "headline": f"Ошибок: {stats['errors']}",
-            "note": "Откройте раздачу, чтобы увидеть причину и повторить проверку.",
-        }
-    if stats["updates"]:
-        return {
-            "tone": "update_available",
-            "headline": f"Ждут решения: {stats['updates']}",
-            "note": "Для этих раздач найдена новая версия. Примените обновление или откройте раздачу.",
-        }
+        tone, key, params = "disabled", "empty", {}
+    elif stats["errors"]:
+        tone, key, params = "error", "errors", {"count": stats["errors"]}
+    elif stats["updates"]:
+        tone, key, params = "update_available", "updates", {"count": stats["updates"]}
+    else:
+        tone, key, params = "active", "calm", {}
     return {
-        "tone": "active",
-        "headline": "Всё спокойно",
-        "note": "Ни одна раздача не требует внимания.",
+        "tone": tone,
+        "headline": i18n.translate(f"watch.{key}.headline", language, **params),
+        "note": i18n.translate(f"watch.{key}.note", language),
     }
 
 
@@ -161,9 +178,24 @@ def _redirect(path: str) -> RedirectResponse:
     return RedirectResponse(path, status_code=303)
 
 
+@router.get("/lang/{code}")
+def switch_language(code: str, request: Request, next: str = "/"):
+    """Выбор языка живёт в cookie: он не должен зависеть от того, кто вошёл."""
+    target = next if next.startswith("/") and not next.startswith("//") else "/"
+    response = _redirect(target)
+    response.set_cookie(
+        LANGUAGE_COOKIE,
+        i18n.normalize(code),
+        max_age=60 * 60 * 24 * 365,
+        samesite="lax",
+        httponly=False,
+    )
+    return response
+
+
 @router.get("/login")
 def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return render(request, "login.html", {"error": None})
 
 
 @router.post("/login")
@@ -171,7 +203,7 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     if check_credentials(username, password):
         request.session["user"] = username
         return _redirect("/")
-    return templates.TemplateResponse("login.html", {"request": request, "error": "Неверный логин или пароль"}, status_code=401)
+    return render(request, "login.html", {"error": i18n.translate("login.failed", current_language(request))}, status_code=401)
 
 
 @router.post("/logout")
@@ -198,19 +230,16 @@ def index(request: Request, db: Session = Depends(get_db)):
     }
     qb_statuses = client_statuses(db)
     ok_clients = sum(1 for item in qb_statuses if item["status"] == "ok")
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "torrents": torrents,
-            "stats": stats,
-            "qb_statuses": qb_statuses,
-            "ok_clients": ok_clients,
-            "watch": _watch_state(stats),
-            "duty": _duty_strips(db, [item.id for item in torrents]),
-            "next_check": next_check_at(),
-        },
-    )
+    language = current_language(request)
+    return render(request, "index.html", {
+        "torrents": torrents,
+        "stats": stats,
+        "qb_statuses": qb_statuses,
+        "ok_clients": ok_clients,
+        "watch": _watch_state(stats, language),
+        "duty": _duty_strips(db, [item.id for item in torrents], language),
+        "next_check": next_check_at(),
+    })
 
 
 @router.get("/add")
@@ -219,18 +248,14 @@ def add_page(request: Request, db: Session = Depends(get_db)):
     selected_client = get_fallback_qb_client(db)
     clients = list_qb_clients(db)
     categories, categories_error = client_categories(db, selected_client.id)
-    return templates.TemplateResponse(
-        "add.html",
-        {
-            "request": request,
-            "settings": get_settings(),
-            "error": None,
-            "clients": clients,
-            "selected_client_id": selected_client.id,
-            "categories": categories,
-            "categories_error": categories_error,
-        },
-    )
+    return render(request, "add.html", {
+        "settings": get_settings(),
+        "error": None,
+        "clients": clients,
+        "selected_client_id": selected_client.id,
+        "categories": categories,
+        "categories_error": categories_error,
+    })
 
 
 @router.post("/add")
@@ -268,19 +293,14 @@ def add(
     except Exception as exc:
         clients = list_qb_clients(db)
         categories, categories_error = client_categories(db, qb_client_id)
-        return templates.TemplateResponse(
-            "add.html",
-            {
-                "request": request,
-                "settings": get_settings(),
-                "error": str(exc),
-                "clients": clients,
-                "selected_client_id": qb_client_id,
-                "categories": categories,
-                "categories_error": categories_error,
-            },
-            status_code=400,
-        )
+        return render(request, "add.html", {
+            "settings": get_settings(),
+            "error": localize(exc, current_language(request)),
+            "clients": clients,
+            "selected_client_id": qb_client_id,
+            "categories": categories,
+            "categories_error": categories_error,
+        }, status_code=400)
 
 
 @router.get("/torrents/{tracked_id}")
@@ -292,20 +312,16 @@ def detail(request: Request, tracked_id: int, db: Session = Depends(get_db)):
     events = db.query(CheckEvent).filter(CheckEvent.tracked_torrent_id == tracked_id).order_by(desc(CheckEvent.created_at)).limit(80).all()
     pending_version = latest_pending_version(db, tracked_id)
     categories, categories_error = client_categories(db, tracked.qb_client_id)
-    return templates.TemplateResponse(
-        "detail.html",
-        {
-            "request": request,
-            "t": tracked,
-            "versions": versions,
-            "events": events,
-            "pending_version": pending_version,
-            "categories": categories,
-            "categories_error": categories_error,
-            "message": request.session.pop("message", None),
-            "action_error": request.session.pop("action_error", None),
-        },
-    )
+    return render(request, "detail.html", {
+        "torrent": tracked,
+        "versions": versions,
+        "events": events,
+        "pending_version": pending_version,
+        "categories": categories,
+        "categories_error": categories_error,
+        "message": request.session.pop("message", None),
+        "action_error": request.session.pop("action_error", None),
+    })
 
 
 @router.post("/torrents/{tracked_id}/check")
@@ -345,10 +361,16 @@ def change_category(
     db: Session = Depends(get_db),
 ):
     try:
+        language = current_language(request)
         tracked = change_torrent_category(db, tracked_id, category)
-        request.session["message"] = f"Категория изменена на «{tracked.category or 'без категории'}»."
+        request.session["message"] = i18n.translate(
+            "detail.category_saved", language,
+            category=tracked.category or i18n.translate("category.unset", language),
+        )
     except Exception as exc:
-        request.session["action_error"] = f"Не удалось изменить категорию: {exc}"
+        request.session["action_error"] = i18n.translate(
+            "detail.category_error", current_language(request), error=localize(exc, current_language(request)),
+        )
     return _redirect(f"/torrents/{tracked_id}")
 
 
@@ -391,19 +413,14 @@ def _settings_response(
     # Пароль в шаблон не уходит: там нужен только факт, что он задан.
     if saved.get("rutracker_password"):
         saved["rutracker_password"] = "***"
-    return templates.TemplateResponse(
-        "settings.html",
-        {
-            "request": request,
-            "settings": get_settings(),
-            "saved": saved,
-            "message": message,
-            "error": error,
-            "qb_clients": list_qb_clients(db),
-            "qb_statuses": client_statuses(db, refresh=refresh_clients),
-        },
-        status_code=status_code,
-    )
+    return render(request, "settings.html", {
+        "settings": get_settings(),
+        "saved": saved,
+        "message": message,
+        "error": error,
+        "qb_clients": list_qb_clients(db),
+        "qb_statuses": client_statuses(db, refresh=refresh_clients),
+    }, status_code=status_code)
 
 
 @router.get("/settings")
@@ -434,7 +451,7 @@ def save_settings(
     for key, value in values.items():
         db.merge(AppSetting(key=key, value=value))
     db.commit()
-    return _settings_response(request, db, message="Настройки сохранены.")
+    return _settings_response(request, db, message=i18n.translate("settings.saved", current_language(request)))
 
 
 @router.post("/settings/test-rutracker")
@@ -455,8 +472,8 @@ def web_test_rutracker(request: Request, db: Session = Depends(get_db)):
             force=True,
         )
     except Exception as exc:
-        return _settings_response(request, db, error=str(exc))
-    return _settings_response(request, db, message="Вход выполнен, cookie сессии обновлён.")
+        return _settings_response(request, db, error=localize(exc, current_language(request)))
+    return _settings_response(request, db, message=i18n.translate("settings.login_ok", current_language(request)))
 
 
 @router.post("/settings/test-qbittorrent")
@@ -464,11 +481,11 @@ def web_test_qb(request: Request, db: Session = Depends(get_db)):
     """Кнопка стоит над списком всех клиентов — значит и проверять должна всех."""
     statuses = client_statuses(db, refresh=True)
     if not statuses:
-        return _settings_response(request, db, error="Ни одного клиента qBittorrent не настроено.")
+        return _settings_response(request, db, error=i18n.translate("settings.qb_none", current_language(request)))
     offline = [item["name"] for item in statuses if item["status"] != "ok"]
     if offline:
-        return _settings_response(request, db, error=f"Нет связи: {', '.join(offline)}. Подробности — в карточке клиента.")
-    return _settings_response(request, db, message=f"Все клиенты на связи: {len(statuses)}.")
+        return _settings_response(request, db, error=i18n.translate("settings.qb_some_offline", current_language(request), names=", ".join(offline)))
+    return _settings_response(request, db, message=i18n.translate("settings.qb_all_online", current_language(request), count=len(statuses)))
 
 
 @router.post("/settings/qbittorrent")
@@ -486,7 +503,7 @@ def add_qb_client(
         create_qb_client(db, name, host, username, password, _bool(verify_tls), timeout_seconds)
         return _redirect("/settings")
     except Exception as exc:
-        return _settings_response(request, db, error=str(exc), status_code=400)
+        return _settings_response(request, db, error=localize(exc, current_language(request)), status_code=400)
 
 
 @router.post("/settings/qbittorrent/{client_id}")
@@ -513,4 +530,10 @@ def logs(request: Request, event_type: str = "", tracked_id: int | None = None, 
         query = query.filter(CheckEvent.tracked_torrent_id == tracked_id)
     events = query.order_by(desc(CheckEvent.created_at)).limit(300).all()
     torrents = db.query(TrackedTorrent).order_by(TrackedTorrent.title).all()
-    return templates.TemplateResponse("logs.html", {"request": request, "events": events, "torrents": torrents, "event_type": event_type, "tracked_id": tracked_id})
+    return render(request, "logs.html", {
+        "events": events,
+        "torrents": torrents,
+        "event_type": event_type,
+        "tracked_id": tracked_id,
+        "event_types": event_type_options(current_language(request)),
+    })

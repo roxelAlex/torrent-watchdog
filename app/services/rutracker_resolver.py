@@ -7,6 +7,7 @@ import requests
 
 from app.config import get_settings
 from app.db import SessionLocal
+from app.errors import InvalidInput, ServiceUnavailable, localize
 from app.models import AppSetting
 from app.services import flaresolverr, rutracker_auth
 from app.services.torrent_parser import parse_torrent_bytes
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 _flaresolverr_lock = threading.Lock()
 
 
-class SessionExpired(ValueError):
+class SessionExpired(InvalidInput):
     """Трекер отдал не файл, а страницу — сессия истекла или её не приняли."""
 
 
@@ -55,7 +56,7 @@ def _download_with_browser(downloader_url: str, source_url: str, download_url: s
     # 401 отдаётся, когда браузеру подсунули страницу вместо файла: проверку
     # содержимого делает сам endpoint, здесь мы только опознаём его вердикт.
     if response.status_code == 401:
-        raise SessionExpired(f"RuTracker не отдал .torrent: {_error_text(response)}")
+        raise SessionExpired("error.rutracker.not_a_torrent", error=_error_text(response))
     response.raise_for_status()
     return response.content
 
@@ -100,7 +101,7 @@ def _fetch_torrent(
         content = response.content
 
     if not content.startswith(b"d"):
-        raise SessionExpired("RuTracker не вернул .torrent. Проверьте cookies или доступность темы.")
+        raise SessionExpired("error.rutracker.no_torrent")
     return content
 
 
@@ -129,9 +130,9 @@ def _download_torrent_until_success(
                     logger.info("rutracker session refreshed, retrying topic_id=%s", topic_id)
                 except rutracker_auth.LoginUnavailable as login_exc:
                     logger.warning("rutracker relogin unavailable: %s", login_exc)
-                    raise RuntimeError(str(login_exc)) from exc
+                    raise login_exc from exc
             if settings.rutracker_max_attempts > 0 and attempt >= settings.rutracker_max_attempts:
-                raise RuntimeError(f"RuTracker не вернул успешный ответ после {attempt} попыток: {exc}") from exc
+                raise ServiceUnavailable("error.rutracker.attempts", attempts=attempt, error=localize(exc, None)) from exc
             attempt += 1
             time.sleep(max(1, settings.rutracker_retry_delay_seconds))
 
@@ -139,7 +140,7 @@ def _download_torrent_until_success(
 def resolve_rutracker(source_url: str, tracked_id: int | None = None) -> ResolvedTorrent:
     settings = get_settings()
     if not settings.rutracker_enabled:
-        raise ValueError("RuTracker resolver отключён")
+        raise InvalidInput("error.rutracker.disabled")
     runtime = _runtime_settings({
         "rutracker_cookie": settings.rutracker_cookie,
         "rutracker_username": settings.rutracker_username,
@@ -160,18 +161,13 @@ def resolve_rutracker(source_url: str, tracked_id: int | None = None) -> Resolve
         # Cookie нет или он без сессии — входим сами, вместо того чтобы падать.
         cookie = relogin()
     if not cookie:
-        raise ValueError(
-            "Не задан ни логин с паролем, ни cookie RuTracker. Заполните их на странице «Настройки»."
-        )
+        raise InvalidInput("error.rutracker.no_access")
     if not rutracker_auth.has_auth_cookie(cookie):
-        raise ValueError(
-            "RuTracker cookie не содержит авторизационных cookie. Нужен полный Request Header Cookie, "
-            "а не только cf_clearance. Либо задайте логин и пароль — сервис войдёт сам."
-        )
+        raise InvalidInput("error.rutracker.cookie_incomplete")
 
     match = TOPIC_RE.search(source_url)
     if not match:
-        raise ValueError("Не удалось определить topic_id RuTracker")
+        raise InvalidInput("error.rutracker.no_topic_id")
 
     topic_id = match.group(1)
     download_url = f"https://rutracker.org/forum/dl.php?t={topic_id}"
