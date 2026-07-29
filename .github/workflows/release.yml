@@ -10,7 +10,7 @@ env:
   REGISTRY_USER: roxelalex
 
 jobs:
-  check-version:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,9 +21,26 @@ jobs:
           file="$(cat VERSION)"
           echo "тег: $tag, VERSION: $file"
           test "$tag" = "$file"
+      # Пустой секрет выглядит как заданный: имя в списке есть, значения нет.
+      # Без этой проверки узнать о нём можно было бы только по «Password required»
+      # после нескольких минут сборки.
+      - name: Секреты реестра заданы
+        env:
+          USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          missing=""
+          [ -n "$USERNAME" ] || missing="$missing DOCKERHUB_USERNAME"
+          [ -n "$TOKEN" ] || missing="$missing DOCKERHUB_TOKEN"
+          if [ -n "$missing" ]; then
+            echo "::error::Пустые или отсутствующие секреты:$missing"
+            echo "Задайте их в Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "оба секрета непустые"
 
   publish:
-    needs: check-version
+    needs: checks
     runs-on: ubuntu-latest
     strategy:
       matrix:
