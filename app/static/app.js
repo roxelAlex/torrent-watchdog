@@ -33,6 +33,7 @@ if (qbClientSelect && categoryList && categoryHint) {
         categoryList.appendChild(option);
       });
       categoryHint.textContent = data.categories.length ? text("loaded") : text("empty");
+      showCategoryPath();
     } catch (failure) {
       categoryHint.textContent = error(failure);
     }
@@ -49,4 +50,26 @@ if (langPicker) {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") langPicker.open = false;
   });
+}
+
+// Папка загрузки и категория не независимы: пустое поле означает «взять путь
+// у категории». Показываем это плейсхолдером, чтобы никто не вписал путь
+// вслепую и молча не перебил категорию.
+const categoryInput = document.querySelector("#category-input");
+const savePathInput = document.querySelector("#save-path-input");
+
+function showCategoryPath() {
+  if (!categoryInput || !savePathInput) return;
+  const chosen = [...(categoryList ? categoryList.options : [])]
+    .find((option) => option.value === categoryInput.value.trim());
+  const path = chosen && chosen.label;
+  savePathInput.placeholder = path
+    ? savePathInput.dataset.fromCategory.replace("__PATH__", path)
+    : savePathInput.dataset.clientDefault;
+}
+
+if (categoryInput && savePathInput) {
+  categoryInput.addEventListener("input", showCategoryPath);
+  categoryInput.addEventListener("change", showCategoryPath);
+  showCategoryPath();
 }

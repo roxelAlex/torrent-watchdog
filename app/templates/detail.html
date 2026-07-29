@@ -32,7 +32,13 @@
       <dt>{{ t("detail.source") }}</dt><dd><a href="{{ torrent.source_url }}">{{ torrent.source_url }}</a></dd>
       <dt>{{ t("detail.info_hash") }}</dt><dd><span class="hash-chip">{{ torrent.current_info_hash or t("common.dash") }}</span></dd>
       <dt>{{ t("detail.qb_hash") }}</dt><dd><span class="hash-chip">{{ torrent.current_qb_hash or t("common.dash") }}</span></dd>
-      <dt>{{ t("detail.save_path") }}</dt><dd class="mono">{{ torrent.save_path or t("common.dash") }}</dd>
+      <dt>{{ t("detail.save_path") }}</dt>
+      <dd class="mono">{{ save_path.path or t("common.dash") }}
+        {%- if save_path.source == "category" %} <span class="faint-note">{{ t("detail.save_path_from_category", category=torrent.category) }}</span>
+        {%- elif save_path.source == "client" %} <span class="faint-note">{{ t("detail.save_path_from_client") }}</span>
+        {%- elif save_path.source == "unknown" %} <span class="faint-note">{{ t("detail.save_path_unknown", category=torrent.category) }}</span>
+        {%- endif %}
+      </dd>
       <dt>{{ t("detail.tags") }}</dt><dd class="mono">{{ torrent.tags or t("common.dash") }}</dd>
       <dt>{{ t("detail.last_check") }}</dt><dd class="mono">{{ dt(torrent.last_check_at) }}</dd>
       <dt>{{ t("detail.last_update") }}</dt><dd class="mono">{{ dt(torrent.last_update_at) }}</dd>

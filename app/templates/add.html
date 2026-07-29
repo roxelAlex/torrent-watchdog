@@ -19,9 +19,8 @@
       </select>
     </label>
     <label>{{ t("add.name") }}<input name="title" placeholder="{{ t('add.name_placeholder') }}"></label>
-    <label>{{ t("add.save_path") }}<input name="save_path" placeholder="/downloads"></label>
     <label>{{ t("add.category") }}
-      <input name="category" list="qb-categories" placeholder="{{ t('add.category_placeholder') }}">
+      <input name="category" id="category-input" list="qb-categories" placeholder="{{ t('add.category_placeholder') }}">
       <datalist id="qb-categories">
         {% for category in categories %}
         <option value="{{ category.name }}" label="{{ category.save_path }}"></option>
@@ -50,6 +49,12 @@
          data-error="{{ t('add.categories_error', error='__ERROR__') }}"
          data-no-link="{{ t('add.categories_no_link') }}">{{ t("add.categories_empty") }}</div>
     {% endif %}
+    <label>{{ t("add.save_path") }}
+      <input name="save_path" id="save-path-input" placeholder="{{ t('add.save_path_client_default') }}"
+             data-from-category="{{ t('add.save_path_from_category', path='__PATH__') }}"
+             data-client-default="{{ t('add.save_path_client_default') }}">
+    </label>
+    <div class="hint">{{ t("add.save_path_hint") }}</div>
     <label>{{ t("add.tags") }}<input name="tags" placeholder="{{ t('add.tags_placeholder') }}"></label>
     <label>{{ t("add.mode") }}
       <select name="update_mode">

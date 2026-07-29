@@ -632,7 +632,14 @@ input:focus, textarea:focus, select:focus {
 
 /* --- Прочее -------------------------------------------------------------- */
 
-.mono, code, .hash-chip {
+.mono, code, /* Приписка рядом со значением: откуда оно взялось, если задано не напрямую. */
+.faint-note {
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.hash-chip {
   font-family: var(--mono);
   font-size: 12.5px;
   word-break: break-all;

@@ -154,6 +154,23 @@ def _duty_strips(db: Session, tracked_ids: list[int], language: str, limit: int 
     return strips
 
 
+def _effective_save_path(tracked: TrackedTorrent, categories: list[dict]) -> dict[str, str]:
+    """Куда на самом деле ляжет раздача.
+
+    Пустой save_path не значит «никуда»: qBittorrent берёт путь категории,
+    а если и у неё пусто — свой стандартный. Показывать в этом случае прочерк
+    было бы неправдой: файлы-то где-то лежат.
+    """
+    if tracked.save_path:
+        return {"path": tracked.save_path, "source": "explicit"}
+    match = next((item for item in categories if item.get("name") == tracked.category), None)
+    if match and match.get("save_path"):
+        return {"path": match["save_path"], "source": "category"}
+    if tracked.category:
+        return {"path": "", "source": "unknown"}
+    return {"path": "", "source": "client"}
+
+
 def _watch_state(stats: dict, language: str) -> dict[str, str]:
     if not stats["total"]:
         tone, key, params = "disabled", "empty", {}
@@ -314,6 +331,7 @@ def detail(request: Request, tracked_id: int, db: Session = Depends(get_db)):
     categories, categories_error = client_categories(db, tracked.qb_client_id)
     return render(request, "detail.html", {
         "torrent": tracked,
+        "save_path": _effective_save_path(tracked, categories),
         "versions": versions,
         "events": events,
         "pending_version": pending_version,
