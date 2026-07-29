@@ -22,6 +22,7 @@ from app.services.qbittorrent_registry import (
     list_qb_clients,
     update_qb_client,
 )
+from app.services import flaresolverr, rutracker_auth
 from app.services.torrent_settings import change_torrent_category
 from app.services.update_applier import apply_update, rollback_to_version
 from app.services.update_checker import check_torrent, create_initial_torrent, latest_pending_version
@@ -386,12 +387,16 @@ def _settings_response(
     status_code: int = 200,
     refresh_clients: bool = False,
 ):
+    saved = {item.key: item.value for item in db.query(AppSetting).all()}
+    # Пароль в шаблон не уходит: там нужен только факт, что он задан.
+    if saved.get("rutracker_password"):
+        saved["rutracker_password"] = "***"
     return templates.TemplateResponse(
         "settings.html",
         {
             "request": request,
             "settings": get_settings(),
-            "saved": {item.key: item.value for item in db.query(AppSetting).all()},
+            "saved": saved,
             "message": message,
             "error": error,
             "qb_clients": list_qb_clients(db),
@@ -409,19 +414,49 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
 @router.post("/settings")
 def save_settings(
     request: Request,
+    rutracker_username: str = Form(""),
+    rutracker_password: str = Form(""),
     rutracker_cookie: str = Form(""),
     flaresolver_address: str = Form(""),
     flaresolver_port: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    for key, value in {
+    values = {
+        "rutracker_username": rutracker_username,
         "rutracker_cookie": rutracker_cookie,
         "flaresolver_address": flaresolver_address,
         "flaresolver_port": flaresolver_port,
-    }.items():
+    }
+    # Пустое поле пароля означает «оставить как есть»: он не показывается в форме,
+    # иначе каждое сохранение настроек стирало бы его.
+    if rutracker_password:
+        values["rutracker_password"] = rutracker_password
+    for key, value in values.items():
         db.merge(AppSetting(key=key, value=value))
     db.commit()
     return _settings_response(request, db, message="Настройки сохранены.")
+
+
+@router.post("/settings/test-rutracker")
+def web_test_rutracker(request: Request, db: Session = Depends(get_db)):
+    """Проверка входа по кнопке: сразу видно, примет трекер логин или запросит капчу."""
+    saved = {item.key: item.value for item in db.query(AppSetting).all()}
+    settings = get_settings()
+    endpoint = flaresolverr.endpoint_url(
+        saved.get("flaresolver_address") or settings.flaresolver_address,
+        saved.get("flaresolver_port") or str(settings.flaresolver_port),
+    )
+    try:
+        rutracker_auth.refresh_cookie(
+            endpoint,
+            saved.get("rutracker_username") or settings.rutracker_username,
+            saved.get("rutracker_password") or settings.rutracker_password,
+            rutracker_auth.normalize_cookie(saved.get("rutracker_cookie") or ""),
+            force=True,
+        )
+    except Exception as exc:
+        return _settings_response(request, db, error=str(exc))
+    return _settings_response(request, db, message="Вход выполнен, cookie сессии обновлён.")
 
 
 @router.post("/settings/test-qbittorrent")

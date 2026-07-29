@@ -60,12 +60,22 @@
       <p class="eyebrow">Доступ к трекеру</p>
       <h2>RuTracker</h2>
     </div>
+    <form method="post" action="/settings/test-rutracker"><button>Проверить вход</button></form>
   </div>
   <form class="form" method="post" action="/settings">
-    <label>Cookies RuTracker
-      <textarea name="rutracker_cookie" rows="4" placeholder="bb_session=...; bb_data=...">{{ saved.rutracker_cookie or "" }}</textarea>
+    <label>Логин<input name="rutracker_username" value="{{ saved.rutracker_username or "" }}" autocomplete="off"></label>
+    <label>Пароль
+      <input name="rutracker_password" type="password" autocomplete="new-password"
+             placeholder="{{ "сохранён — оставьте пустым, чтобы не менять" if saved.rutracker_password else "не задан" }}">
     </label>
-    <div class="hint">Нужна строка Cookie авторизованной сессии целиком. Одного <code>cf_clearance</code> мало — в строке должны быть <code>bb_session</code>, <code>bb_data</code> или <code>bb_t</code>.</div>
+    <div class="hint">С логином и паролем сервис входит на трекер сам и обновляет cookie, когда сессия истекает. Пароль хранится в базе открытым текстом — как и пароли qBittorrent.</div>
+    <details class="technical">
+      <summary>Cookie вручную</summary>
+      <label>Cookies RuTracker
+        <textarea name="rutracker_cookie" rows="4" placeholder="bb_session=...; bb_data=...">{{ saved.rutracker_cookie or "" }}</textarea>
+      </label>
+      <div class="hint">Нужна строка Cookie авторизованной сессии целиком. Одного <code>cf_clearance</code> мало — в строке должны быть <code>bb_session</code>, <code>bb_data</code> или <code>bb_t</code>. Здесь же появится cookie, полученный автоматическим входом. Заполнять вручную нужно, только если трекер запросил капчу: её не пройти ни логином, ни паролем.</div>
+    </details>
     <label>Адрес FlareSolverr<input name="flaresolver_address" placeholder="http://flaresolverr" value="{{ saved.flaresolver_address or settings.flaresolver_address }}"></label>
     <label>Порт FlareSolverr<input name="flaresolver_port" type="number" min="1" max="65535" value="{{ saved.flaresolver_port or settings.flaresolver_port }}"></label>
     <div class="hint">FlareSolverr обходит проверку Cloudflare. Оставьте адрес пустым, чтобы скачивать напрямую.</div>

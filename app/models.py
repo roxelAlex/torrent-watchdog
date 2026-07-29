@@ -133,4 +133,10 @@ class AppSetting(Base):
 
 # Ключи, которые приложение действительно читает из app_settings. Всё остальное —
 # следы удалённых полей формы: они лежат в базе и выглядят как работающие настройки.
-RUNTIME_SETTING_KEYS = ("rutracker_cookie", "flaresolver_address", "flaresolver_port")
+RUNTIME_SETTING_KEYS = (
+    "rutracker_username",
+    "rutracker_password",
+    "rutracker_cookie",
+    "flaresolver_address",
+    "flaresolver_port",
+)

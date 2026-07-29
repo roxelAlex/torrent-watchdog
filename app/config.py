@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "torrent-watchdog"
-    app_version: str = "0.4.0"
+    app_version: str = "0.5.0"
     app_host: str = "0.0.0.0"
     app_port: int = 8096
     tz: str = "Asia/Yekaterinburg"
@@ -46,6 +46,10 @@ class Settings(BaseSettings):
 
     rutracker_enabled: bool = True
     rutracker_cookie: str = ""
+    rutracker_username: str = ""
+    rutracker_password: str = ""
+    # Защита от долбёжки трекера при неверном пароле.
+    rutracker_login_min_interval_seconds: int = 300
     rutracker_user_agent: str = "Mozilla/5.0"
     rutracker_retry_delay_seconds: int = 10
     rutracker_max_attempts: int = 3
