@@ -141,6 +141,10 @@ class AppSetting(Base):
 # Ключи, которые приложение действительно читает из app_settings. Всё остальное —
 # следы удалённых полей формы: они лежат в базе и выглядят как работающие настройки.
 RUNTIME_SETTING_KEYS = (
+    "telegram_token",
+    "telegram_chat_id",
+    "notify_language",
+    "notify_events",
     "rutracker_username",
     "rutracker_password",
     "rutracker_cookie",

@@ -24,7 +24,7 @@ from app.services.qbittorrent_registry import (
 )
 from app import i18n
 from app.errors import localize
-from app.services import flaresolverr, messages, rutracker_auth
+from app.services import flaresolverr, messages, notifier, rutracker_auth
 from app.services.torrent_settings import change_torrent_category
 from app.services.update_applier import apply_update, rollback_to_version
 from app.services.update_checker import check_torrent, create_initial_torrent, latest_pending_version
@@ -413,6 +413,8 @@ def _settings_response(
     # Пароль в шаблон не уходит: там нужен только факт, что он задан.
     if saved.get("rutracker_password"):
         saved["rutracker_password"] = "***"
+    if saved.get("telegram_token"):
+        saved["telegram_token"] = "***"
     return render(request, "settings.html", {
         "settings": get_settings(),
         "saved": saved,
@@ -420,6 +422,8 @@ def _settings_response(
         "error": error,
         "qb_clients": list_qb_clients(db),
         "qb_statuses": client_statuses(db, refresh=refresh_clients),
+        "notify_events": notifier.parse_events(saved.get("notify_events")),
+        "notify_available_events": notifier.AVAILABLE_EVENTS,
     }, status_code=status_code)
 
 
@@ -486,6 +490,43 @@ def web_test_qb(request: Request, db: Session = Depends(get_db)):
     if offline:
         return _settings_response(request, db, error=i18n.translate("settings.qb_some_offline", current_language(request), names=", ".join(offline)))
     return _settings_response(request, db, message=i18n.translate("settings.qb_all_online", current_language(request), count=len(statuses)))
+
+
+@router.post("/settings/notifications")
+def save_notifications(
+    request: Request,
+    telegram_token: str = Form(""),
+    telegram_chat_id: str = Form(""),
+    notify_language: str = Form(""),
+    notify_events: list[str] = Form([]),
+    db: Session = Depends(get_db),
+):
+    """Своя форма — свой роут: общий затирал бы поля, которых в ней нет."""
+    values = {
+        "telegram_chat_id": telegram_chat_id,
+        "notify_language": i18n.normalize(notify_language),
+        # Пустой список — это «ничего не слать», а не «не заполнено»,
+        # поэтому пишем пустую строку, а не пропускаем ключ.
+        "notify_events": ",".join(event for event in notify_events if event in notifier.AVAILABLE_EVENTS),
+    }
+    # Токен, как и пароль, в форме не показывается: пустое поле означает «не менять».
+    if telegram_token:
+        values["telegram_token"] = telegram_token
+    for key, value in values.items():
+        db.merge(AppSetting(key=key, value=value))
+    db.commit()
+    return _settings_response(request, db, message=i18n.translate("settings.saved", current_language(request)))
+
+
+@router.post("/settings/test-telegram")
+def web_test_telegram(request: Request, db: Session = Depends(get_db)):
+    language = current_language(request)
+    try:
+        settings = notifier.load_settings()
+        notifier.send(i18n.translate("notify.test_text", settings.language or language), settings)
+    except Exception as exc:
+        return _settings_response(request, db, error=localize(exc, language))
+    return _settings_response(request, db, message=i18n.translate("notify.test_sent", language))
 
 
 @router.post("/settings/qbittorrent")

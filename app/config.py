@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "torrent-watchdog"
-    app_version: str = "0.6.0"
+    app_version: str = "0.7.0"
     app_host: str = "0.0.0.0"
     app_port: int = 8096
     tz: str = "Asia/Yekaterinburg"
@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     rutracker_max_attempts: int = 3
     flaresolver_address: str = ""
     flaresolver_port: int = 8191
+
+    # Уведомления в Telegram. Обычно задаются на странице «Настройки».
+    telegram_token: str = ""
+    telegram_chat_id: str = ""
+    # Язык уведомлений отдельный: их читает не обязательно тот, кто открывает интерфейс.
+    notify_language: str = "ru"
 
     log_level: str = "INFO"
 

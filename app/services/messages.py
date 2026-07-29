@@ -12,6 +12,7 @@ from typing import Any
 
 from app.i18n import translate
 from app.models import CheckEvent, TrackedTorrent
+from app.services import notifier
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,10 @@ def event(
     new_hash: str | None = None,
     **params: Any,
 ) -> CheckEvent:
+    # Единственное место, где рождаются события, — здесь же и уведомляем.
+    # Отправка асинхронная и не бросает: недоступный Telegram не должен
+    # выглядеть как несостоявшаяся проверка.
+    notifier.notify_event(tracked_id, event_type, code, params)
     return CheckEvent(
         tracked_torrent_id=tracked_id,
         event_type=event_type,

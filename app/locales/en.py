@@ -257,6 +257,23 @@ MESSAGES = {
     "error.login.needs_own_flaresolverr": "Signing in with a username and password only works through the bundled FlareSolverr from this compose file (address http://flaresolverr). With a third-party FlareSolverr, paste the cookie by hand.",
     "error.login.too_soon": "Signing in to RuTracker again is possible in {seconds} s. That keeps the service from hammering the tracker on a wrong password.",
 
+    # Notifications
+    "notify.eyebrow": "Where to report events",
+    "notify.title": "Telegram notifications",
+    "notify.test": "Send a test",
+    "notify.token": "Bot token",
+    "notify.token_saved": "saved — leave empty to keep it",
+    "notify.token_unset": "get one from @BotFather",
+    "notify.chat_id": "Chat ID",
+    "notify.chat_id_hint": "Ask @userinfobot for your own ID. A group ID starts with a minus sign, and the bot has to be added to the group.",
+    "notify.language": "Notification language",
+    "notify.events": "What to report",
+    "notify.hint": "Sending happens in the background and never delays a check. If Telegram is unreachable, the check still counts as done and the reason goes to the container log.",
+    "notify.test_sent": "Test message sent.",
+    "notify.test_text": "torrent-watchdog reporting in. Notifications are set up correctly.",
+    "error.telegram.not_configured": "The bot token or chat ID is missing. Fill them in on the Settings page.",
+    "error.telegram.rejected": "Telegram did not accept the message: {error}",
+
     # Journal
     "logs.eyebrow": "Last 300 records",
     "logs.title": "Event journal",

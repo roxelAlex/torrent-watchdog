@@ -257,6 +257,23 @@ MESSAGES = {
     "error.login.needs_own_flaresolverr": "Вход по логину и паролю работает только через собственный FlareSolverr из этого compose-файла (адрес http://flaresolverr). Для стороннего FlareSolverr вставьте cookie вручную.",
     "error.login.too_soon": "Повторный вход на RuTracker возможен через {seconds} с. Так сервис не долбит трекер при неверном пароле.",
 
+    # Уведомления
+    "notify.eyebrow": "Куда писать о событиях",
+    "notify.title": "Уведомления в Telegram",
+    "notify.test": "Отправить тестовое",
+    "notify.token": "Токен бота",
+    "notify.token_saved": "сохранён — оставьте пустым, чтобы не менять",
+    "notify.token_unset": "получите у @BotFather",
+    "notify.chat_id": "ID чата",
+    "notify.chat_id_hint": "Свой ID можно спросить у @userinfobot. Для группы ID начинается с минуса; бота нужно в неё добавить.",
+    "notify.language": "Язык уведомлений",
+    "notify.events": "О чём писать",
+    "notify.hint": "Отправка идёт в фоне и не задерживает проверку. Если Telegram недоступен, проверка всё равно считается выполненной, а причина попадёт в лог контейнера.",
+    "notify.test_sent": "Тестовое сообщение отправлено.",
+    "notify.test_text": "torrent-watchdog на связи. Уведомления настроены верно.",
+    "error.telegram.not_configured": "Не заданы токен бота или ID чата. Заполните их на странице «Настройки».",
+    "error.telegram.rejected": "Telegram не принял сообщение: {error}",
+
     # Журнал
     "logs.eyebrow": "Последние 300 записей",
     "logs.title": "Журнал событий",

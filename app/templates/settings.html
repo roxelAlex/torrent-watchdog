@@ -84,6 +84,42 @@
 </section>
 
 <section class="panel narrow">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">{{ t("notify.eyebrow") }}</p>
+      <h2>{{ t("notify.title") }}</h2>
+    </div>
+    <form method="post" action="/settings/test-telegram"><button>{{ t("notify.test") }}</button></form>
+  </div>
+  <form class="form" method="post" action="/settings/notifications">
+    <label>{{ t("notify.token") }}
+      <input name="telegram_token" type="password" autocomplete="off"
+             placeholder="{{ t('notify.token_saved') if saved.telegram_token else t('notify.token_unset') }}">
+    </label>
+    <label>{{ t("notify.chat_id") }}<input name="telegram_chat_id" value="{{ saved.telegram_chat_id or "" }}" autocomplete="off" placeholder="123456789"></label>
+    <div class="hint">{{ t("notify.chat_id_hint") }}</div>
+    <label>{{ t("notify.language") }}
+      <select name="notify_language">
+        {% for option in languages %}
+        <option value="{{ option.code }}" {% if (saved.notify_language or settings.notify_language) == option.code %}selected{% endif %}>{{ option.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <fieldset class="option-grid">
+      <legend>{{ t("notify.events") }}</legend>
+      {% for event in notify_available_events %}
+      <label class="check">
+        <input type="checkbox" name="notify_events" value="{{ event }}" {% if event in notify_events %}checked{% endif %}>
+        {{ event_label(event) }}
+      </label>
+      {% endfor %}
+    </fieldset>
+    <div class="hint">{{ t("notify.hint") }}</div>
+    <button class="primary">{{ t("settings.save") }}</button>
+  </form>
+</section>
+
+<section class="panel narrow">
   <h2>{{ t("settings.schedule") }}</h2>
   <dl class="details">
     <dt>{{ t("settings.schedule_runs") }}</dt>
