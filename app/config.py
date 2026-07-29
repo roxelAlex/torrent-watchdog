@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "torrent-watchdog"
-    app_version: str = "0.7.4"
+    app_version: str = "0.7.5"
     app_host: str = "0.0.0.0"
     app_port: int = 8096
     tz: str = "Asia/Yekaterinburg"
