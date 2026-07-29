@@ -50,9 +50,11 @@
          data-no-link="{{ t('add.categories_no_link') }}">{{ t("add.categories_empty") }}</div>
     {% endif %}
     <label>{{ t("add.save_path") }}
-      <input name="save_path" id="save-path-input" placeholder="{{ t('add.save_path_client_default') }}"
+      {% set client_default = client_paths.get("default_save_path") %}
+      {% set default_hint = t("add.save_path_client_path", path=client_default) if client_default else t("add.save_path_client_default") %}
+      <input name="save_path" id="save-path-input" placeholder="{{ default_hint }}"
              data-from-category="{{ t('add.save_path_from_category', path='__PATH__') }}"
-             data-client-default="{{ t('add.save_path_client_default') }}">
+             data-client-default="{{ default_hint }}">
     </label>
     <div class="hint">{{ t("add.save_path_hint") }}</div>
     <label>{{ t("add.tags") }}<input name="tags" placeholder="{{ t('add.tags_placeholder') }}"></label>

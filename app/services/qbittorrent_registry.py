@@ -1,3 +1,4 @@
+import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy.orm import Session
@@ -8,8 +9,11 @@ from app.models import QbittorrentClientConfig
 from app.services.cache import TTLCache
 from app.services.qbittorrent_client import QBittorrentClient
 
+logger = logging.getLogger(__name__)
+
 _status_cache = TTLCache(get_settings().qb_status_cache_seconds)
 _categories_cache = TTLCache(get_settings().qb_categories_cache_seconds)
+_paths_cache = TTLCache(get_settings().qb_categories_cache_seconds)
 
 
 def list_qb_clients(db: Session) -> list[QbittorrentClientConfig]:
@@ -157,6 +161,37 @@ def client_categories(db: Session, client_id: int | None = None) -> tuple[list[d
     return _categories_cache.get_or_set(f"{config.id}:{config.host}:{config.updated_at}", fetch)
 
 
+def client_paths(db: Session, client_id: int | None = None) -> dict[str, object]:
+    """Куда клиент пишет по умолчанию и что делает с файлами при смене категории.
+
+    qBittorrent знает это сам, гадать не нужно: default save path лежит в
+    настройках, а torrent_changed_tmm_enabled говорит, переезжает ли раздача
+    вслед за категорией. Для раздач в ручном режиме перемещения не будет.
+    """
+    try:
+        config = get_qb_client_config(db, client_id)
+    except Exception:
+        return {}
+
+    def fetch() -> dict[str, object]:
+        try:
+            qb = QBittorrentClient(config)
+            qb.login(timeout=qb.probe_timeout)
+            prefs = qb.get_preferences()
+            return {
+                "default_save_path": str(prefs.get("save_path") or ""),
+                "temp_path": str(prefs.get("temp_path") or "") if prefs.get("temp_path_enabled") else "",
+                "auto_tmm": bool(prefs.get("auto_tmm_enabled")),
+                "relocate_on_category_change": bool(prefs.get("torrent_changed_tmm_enabled")),
+            }
+        except Exception as exc:
+            logger.warning("cannot read qBittorrent preferences client=%s error=%s", config.name, exc)
+            return {}
+
+    return _paths_cache.get_or_set(f"{config.id}:{config.host}:{config.updated_at}", fetch)
+
+
 def invalidate_qb_caches() -> None:
     _status_cache.invalidate()
     _categories_cache.invalidate()
+    _paths_cache.invalidate()

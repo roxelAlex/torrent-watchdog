@@ -43,6 +43,22 @@ def test_no_category_means_client_default():
     assert result == {"path": "", "source": "client"}
 
 
+def test_client_default_path_is_used_when_known():
+    """qBittorrent сам знает свой путь по умолчанию — спрашиваем, а не описываем словами."""
+    result = _effective_save_path(torrent(), CATEGORIES, client_default="/downloads")
+    assert result == {"path": "/downloads", "source": "client"}
+
+
+def test_category_without_path_falls_back_to_client_default():
+    result = _effective_save_path(torrent(category="lidarr"), CATEGORIES, client_default="/downloads")
+    assert result == {"path": "/downloads", "source": "unknown"}
+
+
+def test_explicit_path_ignores_client_default():
+    result = _effective_save_path(torrent(save_path="/custom"), CATEGORIES, client_default="/downloads")
+    assert result["path"] == "/custom"
+
+
 def test_unknown_category_is_not_invented():
     """Категорию завели в сервисе, но в клиенте её нет: путь придумывать нельзя."""
     result = _effective_save_path(torrent(category="исчезнувшая"), CATEGORIES)

@@ -15,6 +15,7 @@ from app.schemas import TorrentCreate
 from app.services.qbittorrent_client import QBittorrentClient
 from app.services.qbittorrent_registry import (
     client_categories,
+    client_paths,
     client_statuses,
     create_qb_client,
     get_fallback_qb_client,
@@ -154,7 +155,7 @@ def _duty_strips(db: Session, tracked_ids: list[int], language: str, limit: int 
     return strips
 
 
-def _effective_save_path(tracked: TrackedTorrent, categories: list[dict]) -> dict[str, str]:
+def _effective_save_path(tracked: TrackedTorrent, categories: list[dict], client_default: str = "") -> dict[str, str]:
     """Куда на самом деле ляжет раздача.
 
     Пустой save_path не значит «никуда»: qBittorrent берёт путь категории,
@@ -167,8 +168,8 @@ def _effective_save_path(tracked: TrackedTorrent, categories: list[dict]) -> dic
     if match and match.get("save_path"):
         return {"path": match["save_path"], "source": "category"}
     if tracked.category:
-        return {"path": "", "source": "unknown"}
-    return {"path": "", "source": "client"}
+        return {"path": client_default, "source": "unknown"}
+    return {"path": client_default, "source": "client"}
 
 
 def _watch_state(stats: dict, language: str) -> dict[str, str]:
@@ -266,6 +267,7 @@ def add_page(request: Request, db: Session = Depends(get_db)):
     clients = list_qb_clients(db)
     categories, categories_error = client_categories(db, selected_client.id)
     return render(request, "add.html", {
+        "client_paths": client_paths(db, selected_client.id),
         "settings": get_settings(),
         "error": None,
         "clients": clients,
@@ -311,6 +313,7 @@ def add(
         clients = list_qb_clients(db)
         categories, categories_error = client_categories(db, qb_client_id)
         return render(request, "add.html", {
+            "client_paths": client_paths(db, qb_client_id),
             "settings": get_settings(),
             "error": localize(exc, current_language(request)),
             "clients": clients,
@@ -329,9 +332,11 @@ def detail(request: Request, tracked_id: int, db: Session = Depends(get_db)):
     events = db.query(CheckEvent).filter(CheckEvent.tracked_torrent_id == tracked_id).order_by(desc(CheckEvent.created_at)).limit(80).all()
     pending_version = latest_pending_version(db, tracked_id)
     categories, categories_error = client_categories(db, tracked.qb_client_id)
+    paths = client_paths(db, tracked.qb_client_id)
     return render(request, "detail.html", {
         "torrent": tracked,
-        "save_path": _effective_save_path(tracked, categories),
+        "save_path": _effective_save_path(tracked, categories, str(paths.get("default_save_path") or "")),
+        "client_paths": paths,
         "versions": versions,
         "events": events,
         "pending_version": pending_version,

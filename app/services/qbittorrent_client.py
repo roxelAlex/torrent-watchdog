@@ -155,6 +155,9 @@ class QBittorrentClient:
             )
         logger.info("qbittorrent host=%s action=filePrio hash=%s files=%s priority=%s result=ok", mask_url(self.base_url), torrent_hash, len(file_ids), priority)
 
+    def get_preferences(self) -> dict[str, Any]:
+        return self._get("/api/v2/app/preferences").json()
+
     def get_categories(self) -> list[dict[str, str]]:
         categories = self._get("/api/v2/torrents/categories").json()
         if not isinstance(categories, dict):

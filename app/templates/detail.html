@@ -35,7 +35,7 @@
       <dt>{{ t("detail.save_path") }}</dt>
       <dd class="mono">{{ save_path.path or t("common.dash") }}
         {%- if save_path.source == "category" %} <span class="faint-note">{{ t("detail.save_path_from_category", category=torrent.category) }}</span>
-        {%- elif save_path.source == "client" %} <span class="faint-note">{{ t("detail.save_path_from_client") }}</span>
+        {%- elif save_path.source == "client" %} <span class="faint-note">{{ t("detail.save_path_from_client_path", path=save_path.path) if save_path.path else t("detail.save_path_from_client") }}</span>
         {%- elif save_path.source == "unknown" %} <span class="faint-note">{{ t("detail.save_path_unknown", category=torrent.category) }}</span>
         {%- endif %}
       </dd>
@@ -57,6 +57,8 @@
     <button type="submit">{{ t("detail.category_save") }}</button>
     {% if categories_error %}
     <span class="hint">{{ t("detail.categories_error", error=categories_error) }}</span>
+    {% elif client_paths.get("relocate_on_category_change") is not none %}
+    <span class="hint">{{ t("detail.category_moves_files") if client_paths.relocate_on_category_change else t("detail.category_keeps_files") }}</span>
     {% endif %}
   </form>
   <div class="actions block">
