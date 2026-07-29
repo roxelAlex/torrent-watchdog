@@ -8,7 +8,7 @@ from app.errors import InvalidInput
 from app.models import EventType, TorrentStatus, TorrentVersion, TrackedTorrent
 from app.services import messages
 from app.services.qbittorrent_client import QBittorrentClient
-from app.services.qbittorrent_registry import get_qb_client_config
+from app.services.qbittorrent_registry import ensure_category, get_qb_client_config
 from app.services.torrent_diff import build_torrent_diff, diff_to_json
 from app.services.tracker_resolver import adopt_torrent_file, normalize_source_url, resolve_source
 from app.services.update_applier import apply_update
@@ -50,6 +50,8 @@ def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
     try:
         qb = QBittorrentClient(qb_config)
         qb.login()
+        # Своя категория должна существовать до добавления: иначе раздача осядет без неё.
+        ensure_category(qb, payload.category)
         qb_hash = qb.add_torrent_file(resolved.torrent_file_path or "", payload.save_path, payload.category, payload.tags, payload.add_paused)
         tracked.current_qb_hash = qb_hash
         db.commit()

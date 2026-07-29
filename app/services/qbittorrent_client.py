@@ -155,6 +155,12 @@ class QBittorrentClient:
             )
         logger.info("qbittorrent host=%s action=filePrio hash=%s files=%s priority=%s result=ok", mask_url(self.base_url), torrent_hash, len(file_ids), priority)
 
+    def create_category(self, name: str, save_path: str = "") -> None:
+        """qBittorrent отвечает 409 на setCategory для несуществующей категории,
+        поэтому свою категорию нужно сначала завести."""
+        self._post("/api/v2/torrents/createCategory", data={"category": name, "savePath": save_path})
+        logger.info("qbittorrent host=%s action=createCategory category=%s result=ok", mask_url(self.base_url), name)
+
     def get_preferences(self) -> dict[str, Any]:
         return self._get("/api/v2/app/preferences").json()
 

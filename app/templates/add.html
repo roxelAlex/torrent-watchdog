@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_category.html" import category_select with context %}
 {% block content %}
 <section class="panel narrow">
   <p class="eyebrow">{{ t("add.eyebrow") }}</p>
@@ -20,41 +21,31 @@
     </label>
     <label>{{ t("add.name") }}<input name="title" placeholder="{{ t('add.name_placeholder') }}"></label>
     <label>{{ t("add.category") }}
-      <input name="category" id="category-input" list="qb-categories" placeholder="{{ t('add.category_placeholder') }}">
-      <datalist id="qb-categories">
-        {% for category in categories %}
-        <option value="{{ category.name }}" label="{{ category.save_path }}"></option>
-        {% endfor %}
-      </datalist>
+{{ category_select("") }}
     </label>
-    {% if categories_error %}
     <div class="hint" id="category-hint"
          data-loading="{{ t('add.categories_loading') }}"
          data-loaded="{{ t('add.categories_loaded') }}"
          data-empty="{{ t('add.categories_empty') }}"
          data-error="{{ t('add.categories_error', error='__ERROR__') }}"
-         data-no-link="{{ t('add.categories_no_link') }}">{{ t("add.categories_error", error=categories_error) }}</div>
-    {% elif categories %}
-    <div class="hint" id="category-hint"
-         data-loading="{{ t('add.categories_loading') }}"
-         data-loaded="{{ t('add.categories_loaded') }}"
-         data-empty="{{ t('add.categories_empty') }}"
-         data-error="{{ t('add.categories_error', error='__ERROR__') }}"
-         data-no-link="{{ t('add.categories_no_link') }}">{{ t("add.categories_loaded") }}</div>
-    {% else %}
-    <div class="hint" id="category-hint"
-         data-loading="{{ t('add.categories_loading') }}"
-         data-loaded="{{ t('add.categories_loaded') }}"
-         data-empty="{{ t('add.categories_empty') }}"
-         data-error="{{ t('add.categories_error', error='__ERROR__') }}"
-         data-no-link="{{ t('add.categories_no_link') }}">{{ t("add.categories_empty") }}</div>
-    {% endif %}
+         data-no-link="{{ t('add.categories_no_link') }}">
+      {%- if categories_error %}{{ t("add.categories_error", error=categories_error) }}
+      {%- elif categories %}{{ t("add.categories_loaded") }}
+      {%- else %}{{ t("add.categories_empty") }}{% endif %}
+    </div>
     <label>{{ t("add.save_path") }}
       {% set client_default = client_paths.get("default_save_path") %}
       {% set default_hint = t("add.save_path_client_path", path=client_default) if client_default else t("add.save_path_client_default") %}
-      <input name="save_path" id="save-path-input" placeholder="{{ default_hint }}"
+      <input name="save_path" id="save-path-input" list="qb-save-paths" placeholder="{{ default_hint }}"
              data-from-category="{{ t('add.save_path_from_category', path='__PATH__') }}"
-             data-client-default="{{ default_hint }}">
+             data-client-default="{{ default_hint }}"
+             data-label-default="{{ t('path.client_default') }}"
+             data-label-category="{{ t('path.of_category', name='__NAME__') }}">
+      <datalist id="qb-save-paths">
+        {% for item in path_suggestions %}
+        <option value="{{ item.path }}" label="{{ t('path.client_default') if item.kind == 'default' else t('path.of_category', name=item.category) }}"></option>
+        {% endfor %}
+      </datalist>
     </label>
     <div class="hint">{{ t("add.save_path_hint") }}</div>
     <label>{{ t("add.tags") }}<input name="tags" placeholder="{{ t('add.tags_placeholder') }}"></label>

@@ -57,6 +57,12 @@ MESSAGES = {
     "table.checked": "Проверена",
     "table.actions": "Действия",
     "client.unset": "не задан",
+    "category.none": "— без категории —",
+    "category.custom": "— своя категория —",
+    "category.custom_placeholder": "Название новой категории",
+    "category.missing_in_client": "нет в клиенте",
+    "path.client_default": "по умолчанию",
+    "path.of_category": "категория {name}",
     "category.unset": "без категории",
 
     # Статусы раздач

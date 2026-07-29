@@ -1,0 +1,17 @@
+{% macro category_select(current) -%}
+      <select name="category" id="category-select" data-custom="__custom__">
+        <option value="">{{ t("category.none") }}</option>
+        {% if orphan_category %}
+        <option value="{{ orphan_category }}" selected>{{ orphan_category }} — {{ t("category.missing_in_client") }}</option>
+        {% endif %}
+        {% for category in categories %}
+        <option value="{{ category.name }}" data-path="{{ category.save_path }}"
+                {% if category.name == current %}selected{% endif %}>
+          {{ category.name }}{% if category.save_path %} — {{ category.save_path }}{% endif %}
+        </option>
+        {% endfor %}
+        <option value="__custom__">{{ t("category.custom") }}</option>
+      </select>
+      <input name="category_custom" id="category-custom" class="category-custom" hidden
+             placeholder="{{ t('category.custom_placeholder') }}">
+{%- endmacro %}

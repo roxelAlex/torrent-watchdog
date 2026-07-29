@@ -7,7 +7,7 @@ from app.i18n import translate
 from app.models import EventType, TrackedTorrent
 from app.services import messages
 from app.services.qbittorrent_client import QBittorrentClient
-from app.services.qbittorrent_registry import get_qb_client_config
+from app.services.qbittorrent_registry import ensure_category, get_qb_client_config
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,7 @@ def change_torrent_category(db: Session, tracked_id: int, category: str) -> Trac
     if not qb.get_torrent(tracked.current_qb_hash):
         raise ServiceUnavailable("error.torrent.not_in_client", client=qb_config.name)
 
+    ensure_category(qb, normalized_category)
     qb.set_category(tracked.current_qb_hash, normalized_category)
     old_category = tracked.category
     tracked.category = normalized_category

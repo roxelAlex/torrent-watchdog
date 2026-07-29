@@ -57,6 +57,12 @@ MESSAGES = {
     "table.checked": "Checked",
     "table.actions": "Actions",
     "client.unset": "not set",
+    "category.none": "— no category —",
+    "category.custom": "— custom category —",
+    "category.custom_placeholder": "Name of the new category",
+    "category.missing_in_client": "not in the client",
+    "path.client_default": "the default",
+    "path.of_category": "category {name}",
     "category.unset": "no category",
 
     # Torrent statuses

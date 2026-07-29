@@ -21,6 +21,7 @@ from app.services.qbittorrent_registry import (
     get_fallback_qb_client,
     get_qb_client_config,
     list_qb_clients,
+    path_suggestions,
     update_qb_client,
 )
 from app import i18n
@@ -155,6 +156,29 @@ def _duty_strips(db: Session, tracked_ids: list[int], language: str, limit: int 
     return strips
 
 
+CUSTOM_CATEGORY = "__custom__"
+
+
+def _chosen_category(choice: str, custom: str) -> str:
+    """Список и поле «своя категория» приходят раздельно, наружу нужно одно значение."""
+    return custom.strip() if choice.strip() == CUSTOM_CATEGORY else choice.strip()
+
+
+def _category_context(db: Session, client_id: int | None, current: str) -> dict:
+    """Всё, что нужно шаблону для списка категорий и подсказок путей."""
+    categories, categories_error = client_categories(db, client_id)
+    paths = client_paths(db, client_id)
+    known = [item.get("name") for item in categories]
+    return {
+        "categories": categories,
+        "categories_error": categories_error,
+        "client_paths": paths,
+        "path_suggestions": path_suggestions(categories, str(paths.get("default_save_path") or "")),
+        # Категория раздачи могла исчезнуть из клиента — не терять её молча.
+        "orphan_category": current if current and current not in known else "",
+    }
+
+
 def _effective_save_path(tracked: TrackedTorrent, categories: list[dict], client_default: str = "") -> dict[str, str]:
     """Куда на самом деле ляжет раздача.
 
@@ -265,15 +289,12 @@ def add_page(request: Request, db: Session = Depends(get_db)):
     # Понятия «основной» нет: подставляем первого по имени, выбор всё равно за пользователем.
     selected_client = get_fallback_qb_client(db)
     clients = list_qb_clients(db)
-    categories, categories_error = client_categories(db, selected_client.id)
     return render(request, "add.html", {
-        "client_paths": client_paths(db, selected_client.id),
         "settings": get_settings(),
         "error": None,
         "clients": clients,
         "selected_client_id": selected_client.id,
-        "categories": categories,
-        "categories_error": categories_error,
+        **_category_context(db, selected_client.id, ""),
     })
 
 
@@ -285,6 +306,7 @@ def add(
     title: str = Form(""),
     save_path: str = Form(""),
     category: str = Form(""),
+    category_custom: str = Form(""),
     tags: str = Form(""),
     update_mode: str = Form("new_files_only"),
     auto_update: str | None = Form(None),
@@ -293,6 +315,7 @@ def add(
     add_paused: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
+    category = _chosen_category(category, category_custom)
     payload = TorrentCreate(
         qb_client_id=qb_client_id,
         source_url=source_url,
@@ -311,15 +334,12 @@ def add(
         return _redirect(f"/torrents/{tracked.id}")
     except Exception as exc:
         clients = list_qb_clients(db)
-        categories, categories_error = client_categories(db, qb_client_id)
         return render(request, "add.html", {
-            "client_paths": client_paths(db, qb_client_id),
             "settings": get_settings(),
             "error": localize(exc, current_language(request)),
             "clients": clients,
             "selected_client_id": qb_client_id,
-            "categories": categories,
-            "categories_error": categories_error,
+            **_category_context(db, qb_client_id, category),
         }, status_code=400)
 
 
@@ -331,17 +351,16 @@ def detail(request: Request, tracked_id: int, db: Session = Depends(get_db)):
     versions = db.query(TorrentVersion).filter(TorrentVersion.tracked_torrent_id == tracked_id).order_by(desc(TorrentVersion.detected_at)).all()
     events = db.query(CheckEvent).filter(CheckEvent.tracked_torrent_id == tracked_id).order_by(desc(CheckEvent.created_at)).limit(80).all()
     pending_version = latest_pending_version(db, tracked_id)
-    categories, categories_error = client_categories(db, tracked.qb_client_id)
-    paths = client_paths(db, tracked.qb_client_id)
+    context = _category_context(db, tracked.qb_client_id, tracked.category)
     return render(request, "detail.html", {
         "torrent": tracked,
-        "save_path": _effective_save_path(tracked, categories, str(paths.get("default_save_path") or "")),
-        "client_paths": paths,
+        "save_path": _effective_save_path(
+            tracked, context["categories"], str(context["client_paths"].get("default_save_path") or ""),
+        ),
         "versions": versions,
         "events": events,
         "pending_version": pending_version,
-        "categories": categories,
-        "categories_error": categories_error,
+        **context,
         "message": request.session.pop("message", None),
         "action_error": request.session.pop("action_error", None),
     })
@@ -381,11 +400,12 @@ def change_category(
     request: Request,
     tracked_id: int,
     category: str = Form(""),
+    category_custom: str = Form(""),
     db: Session = Depends(get_db),
 ):
     try:
         language = current_language(request)
-        tracked = change_torrent_category(db, tracked_id, category)
+        tracked = change_torrent_category(db, tracked_id, _chosen_category(category, category_custom))
         request.session["message"] = i18n.translate(
             "detail.category_saved", language,
             category=tracked.category or i18n.translate("category.unset", language),
