@@ -8,23 +8,37 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
-from app.db import init_db
+from app.db import SessionLocal, init_db
 from app.routers import api, health, web
 from app.scheduler import start_scheduler, stop_scheduler
 from app.auth import is_authenticated
-from app.services.qbittorrent_client import QBittorrentClient
+from app.services.qbittorrent_registry import client_statuses
 
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 
+def _log_startup_clients() -> None:
+    """Проба настроенных клиентов, а не только клиента из .env. Старт не должна ломать."""
+    logger = logging.getLogger(__name__)
+    db = SessionLocal()
+    try:
+        for status in client_statuses(db):
+            if status.get("status") == "ok":
+                logger.info("qBittorrent ready name=%s version=%s", status.get("name"), status.get("version"))
+            else:
+                logger.warning("qBittorrent unavailable at startup name=%s error=%s", status.get("name"), status.get("error"))
+    except Exception:
+        logger.exception("qBittorrent startup probe failed")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    qb_status = QBittorrentClient().test_connection()
-    if qb_status.get("status") != "ok":
-        logging.getLogger(__name__).warning("qBittorrent unavailable at startup host=%s error=%s", qb_status.get("host"), qb_status.get("error"))
+    _log_startup_clients()
     start_scheduler()
     yield
     stop_scheduler()

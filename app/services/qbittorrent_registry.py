@@ -1,8 +1,14 @@
+from concurrent.futures import ThreadPoolExecutor
+
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import QbittorrentClientConfig
+from app.services.cache import TTLCache
 from app.services.qbittorrent_client import QBittorrentClient
+
+_status_cache = TTLCache(get_settings().qb_status_cache_seconds)
+_categories_cache = TTLCache(get_settings().qb_categories_cache_seconds)
 
 
 def list_qb_clients(db: Session) -> list[QbittorrentClientConfig]:
@@ -62,6 +68,7 @@ def create_qb_client(
     db.add(client)
     db.commit()
     db.refresh(client)
+    invalidate_qb_caches()
     return client
 
 
@@ -72,6 +79,7 @@ def set_default_qb_client(db: Session, client_id: int) -> None:
     db.query(QbittorrentClientConfig).update({QbittorrentClientConfig.is_default: False})
     client.is_default = True
     db.commit()
+    invalidate_qb_caches()
 
 
 def update_qb_client(
@@ -96,6 +104,7 @@ def update_qb_client(
     client.timeout_seconds = timeout_seconds
     db.commit()
     db.refresh(client)
+    invalidate_qb_caches()
     return client
 
 
@@ -103,17 +112,61 @@ def test_qb_client(client: QbittorrentClientConfig) -> dict[str, str]:
     return QBittorrentClient(client).test_connection()
 
 
-def client_statuses(db: Session) -> list[dict[str, str]]:
-    statuses = []
-    for client in list_qb_clients(db):
-        result = test_qb_client(client)
-        statuses.append({
-            "id": str(client.id),
-            "name": client.name,
-            "host": client.host,
-            "status": result.get("status", "unknown"),
-            "version": result.get("version", ""),
-            "error": result.get("error", ""),
-            "is_default": "true" if client.is_default else "false",
-        })
-    return statuses
+def _probe(client: QbittorrentClientConfig) -> dict[str, str]:
+    result = test_qb_client(client)
+    return {
+        "id": str(client.id),
+        "name": client.name,
+        "host": client.host,
+        "status": result.get("status", "unknown"),
+        "version": result.get("version", ""),
+        "error": result.get("error", ""),
+        "is_default": "true" if client.is_default else "false",
+    }
+
+
+def client_statuses(db: Session, refresh: bool = False) -> list[dict[str, str]]:
+    """Статусы всех клиентов: параллельно и с коротким кэшем.
+
+    Вызывается на каждый рендер главной, настроек и /health. Без кэша каждый
+    недоступный клиент добавлял к странице свой таймаут соединения.
+    """
+    clients = list_qb_clients(db)
+    if not clients:
+        return []
+    # Правка клиента меняет updated_at и тем самым сама сбрасывает кэш.
+    key = "|".join(f"{client.id}:{client.host}:{client.updated_at}" for client in clients)
+    if refresh:
+        _status_cache.invalidate()
+
+    def probe_all() -> list[dict[str, str]]:
+        if len(clients) == 1:
+            return [_probe(clients[0])]
+        with ThreadPoolExecutor(max_workers=min(len(clients), 8), thread_name_prefix="qb-probe") as pool:
+            return list(pool.map(_probe, clients))
+
+    return _status_cache.get_or_set(key, probe_all)
+
+
+def client_categories(db: Session, client_id: int | None = None) -> tuple[list[dict[str, str]], str | None]:
+    """Категории qBittorrent для выпадающих списков. Меняются редко — кэшируются."""
+    try:
+        config = get_qb_client_config(db, client_id)
+    except Exception as exc:
+        return [], str(exc)
+
+    def fetch() -> tuple[list[dict[str, str]], str | None]:
+        try:
+            qb = QBittorrentClient(config)
+            # Путь рендера страницы: ждать полный рабочий таймаут ради списка категорий незачем.
+            qb.login(timeout=qb.probe_timeout)
+            return qb.get_categories(), None
+        except Exception as exc:
+            return [], str(exc)
+
+    return _categories_cache.get_or_set(f"{config.id}:{config.host}:{config.updated_at}", fetch)
+
+
+def invalidate_qb_caches() -> None:
+    _status_cache.invalidate()
+    _categories_cache.invalidate()

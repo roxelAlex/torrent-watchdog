@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
@@ -11,9 +11,27 @@ class Base(DeclarativeBase):
 
 
 settings = get_settings()
-connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+is_sqlite = settings.database_url.startswith("sqlite")
+connect_args = {"check_same_thread": False} if is_sqlite else {}
 engine = create_engine(settings.database_url, connect_args=connect_args, future=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)
+
+
+if is_sqlite:
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_connection, _record) -> None:
+        """Планировщик пишет из своего потока, пока веб-запросы читают.
+
+        Без WAL это «database is locked»; без foreign_keys не работает
+        ondelete="CASCADE", объявленный в моделях.
+        """
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 def init_db() -> None:
@@ -21,7 +39,16 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _migrate_sqlite()
+    _ensure_indexes()
     _ensure_default_qbittorrent_client(models)
+
+
+def _ensure_indexes() -> None:
+    """create_all пропускает уже существующие таблицы целиком, вместе с их индексами."""
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            for index in table.indexes:
+                index.create(bind=conn, checkfirst=True)
 
 
 def _migrate_sqlite() -> None:

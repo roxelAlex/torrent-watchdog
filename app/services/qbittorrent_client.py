@@ -20,16 +20,18 @@ class QBittorrentClient:
         self.password = config.password if config else settings.qb_password
         self.verify_tls = config.verify_tls if config else settings.qb_verify_tls
         self.timeout = config.timeout_seconds if config else settings.qb_timeout_seconds
+        # Проба не должна ждать рабочий таймаут: её цена платится при каждом рендере.
+        self.probe_timeout = min(self.timeout, settings.qb_probe_timeout_seconds)
         self.session = requests.Session()
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
 
-    def login(self) -> None:
+    def login(self, timeout: int | None = None) -> None:
         response = self.session.post(
             self._url("/api/v2/auth/login"),
             data={"username": self.username, "password": self.password},
-            timeout=self.timeout,
+            timeout=timeout or self.timeout,
             verify=self.verify_tls,
         )
         response.raise_for_status()
@@ -39,10 +41,13 @@ class QBittorrentClient:
             raise RuntimeError("qBittorrent отклонил логин")
 
     def test_connection(self) -> dict[str, str]:
+        """Один запрос версии; логин только если клиент его потребовал."""
         try:
-            response = self.session.get(self._url("/api/v2/app/version"), timeout=self.timeout, verify=self.verify_tls)
+            response = self.session.get(self._url("/api/v2/app/version"), timeout=self.probe_timeout, verify=self.verify_tls)
+            if response.status_code == 403:
+                self.login(timeout=self.probe_timeout)
+                response = self.session.get(self._url("/api/v2/app/version"), timeout=self.probe_timeout, verify=self.verify_tls)
             response.raise_for_status()
-            self.login()
             return {"status": "ok", "host": mask_url(self.base_url), "version": response.text.strip()}
         except Exception as exc:
             return {"status": "unavailable", "host": mask_url(self.base_url), "error": str(exc)}

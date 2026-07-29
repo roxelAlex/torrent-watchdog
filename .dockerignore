@@ -1,0 +1,12 @@
+.git
+.gitignore
+data
+__pycache__
+**/__pycache__
+*.py[cod]
+.venv
+venv
+.env
+*.md
+tests
+requirements-dev.txt

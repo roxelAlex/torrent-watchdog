@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -89,6 +89,8 @@ class QbittorrentClientConfig(Base):
 
 class TorrentVersion(Base):
     __tablename__ = "torrent_versions"
+    # История версий всегда читается по одной раздаче и в порядке обнаружения.
+    __table_args__ = (Index("ix_torrent_versions_tracked_detected", "tracked_torrent_id", "detected_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tracked_torrent_id: Mapped[int] = mapped_column(ForeignKey("tracked_torrents.id", ondelete="CASCADE"))
@@ -106,6 +108,11 @@ class TorrentVersion(Base):
 
 class CheckEvent(Base):
     __tablename__ = "check_events"
+    # Полоска вахты, журнал раздачи и общий журнал фильтруют по раздаче и сортируют по времени.
+    __table_args__ = (
+        Index("ix_check_events_tracked_created", "tracked_torrent_id", "created_at"),
+        Index("ix_check_events_created", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tracked_torrent_id: Mapped[int | None] = mapped_column(ForeignKey("tracked_torrents.id", ondelete="CASCADE"), nullable=True)

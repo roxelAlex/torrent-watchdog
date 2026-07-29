@@ -8,7 +8,7 @@ from app.models import CheckEvent, EventType, TorrentStatus, TorrentVersion, Tra
 from app.services.qbittorrent_client import QBittorrentClient
 from app.services.qbittorrent_registry import get_qb_client_config
 from app.services.torrent_diff import build_torrent_diff, diff_to_json
-from app.services.tracker_resolver import resolve_source
+from app.services.tracker_resolver import adopt_torrent_file, resolve_source
 from app.services.update_applier import apply_update
 from app.utils import mask_url
 
@@ -40,7 +40,8 @@ def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
     db.commit()
     db.refresh(tracked)
 
-    resolved = resolve_source(payload.source_url, tracked_id=tracked.id)
+    # Файл уже скачан выше — просто перекладываем его из _pending в папку раздачи.
+    resolved = adopt_torrent_file(resolved, tracked.id)
     qb_hash = ""
     try:
         qb = QBittorrentClient(qb_config)
@@ -164,10 +165,32 @@ def check_torrent(db: Session, tracked_id: int) -> TrackedTorrent:
         return tracked
 
 
-def latest_pending_version(db: Session, tracked_id: int) -> TorrentVersion | None:
+def current_version(db: Session, tracked_id: int) -> TorrentVersion | None:
     return (
         db.query(TorrentVersion)
-        .filter(TorrentVersion.tracked_torrent_id == tracked_id, TorrentVersion.is_current.is_(False))
+        .filter(TorrentVersion.tracked_torrent_id == tracked_id, TorrentVersion.is_current.is_(True))
         .order_by(desc(TorrentVersion.detected_at))
         .first()
     )
+
+
+def latest_pending_version(db: Session, tracked_id: int) -> TorrentVersion | None:
+    """Новая версия, ожидающая применения.
+
+    Одного is_current=False мало: после применения обновления предыдущая версия
+    тоже перестаёт быть текущей, и «Применить» установило бы старую раздачу
+    поверх новой. Ожидающей считается только версия, которую ещё не применяли
+    и которую обнаружили позже текущей.
+    """
+    tracked = db.get(TrackedTorrent, tracked_id)
+    query = db.query(TorrentVersion).filter(
+        TorrentVersion.tracked_torrent_id == tracked_id,
+        TorrentVersion.is_current.is_(False),
+        TorrentVersion.applied_at.is_(None),
+    )
+    if tracked and tracked.current_info_hash:
+        query = query.filter(TorrentVersion.info_hash != tracked.current_info_hash)
+    current = current_version(db, tracked_id)
+    if current:
+        query = query.filter(TorrentVersion.detected_at > current.detected_at)
+    return query.order_by(desc(TorrentVersion.detected_at)).first()

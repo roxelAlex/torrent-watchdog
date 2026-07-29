@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import desc, func
-from sqlalchemy.orm import Session
+from sqlalchemy import desc, func, select
+from sqlalchemy.orm import Session, joinedload
 from datetime import timezone
 from zoneinfo import ZoneInfo
 
@@ -14,6 +14,7 @@ from app.scheduler import next_check_at
 from app.schemas import TorrentCreate
 from app.services.qbittorrent_client import QBittorrentClient
 from app.services.qbittorrent_registry import (
+    client_categories,
     client_statuses,
     create_qb_client,
     get_default_qb_client,
@@ -87,32 +88,38 @@ templates.env.filters["dt"] = _fmt_dt
 templates.env.globals["version_summary"] = _version_summary
 
 
-def _qb_categories(db: Session, client_id: int | None = None) -> tuple[list[dict[str, str]], str | None]:
-    try:
-        config = get_qb_client_config(db, client_id)
-        qb = QBittorrentClient(config)
-        qb.login()
-        return qb.get_categories(), None
-    except Exception as exc:
-        return [], str(exc)
-
-
-def _duty_strip(db: Session, tracked_id: int, limit: int = 14) -> list[dict[str, str]]:
-    """Последние исходы проверок, от старых к новым, для полоски вахты."""
-    events = (
-        db.query(CheckEvent)
-        .filter(CheckEvent.tracked_torrent_id == tracked_id, CheckEvent.event_type.in_(DUTY_OUTCOMES))
-        .order_by(desc(CheckEvent.created_at))
-        .limit(limit)
-        .all()
+def _duty_strips(db: Session, tracked_ids: list[int], limit: int = 14) -> dict[int, list[dict[str, str]]]:
+    """Последние исходы проверок для полосок вахты — одним запросом на весь реестр."""
+    if not tracked_ids:
+        return {}
+    ranked = (
+        select(
+            CheckEvent.tracked_torrent_id.label("tracked_id"),
+            CheckEvent.event_type,
+            CheckEvent.created_at,
+            func.row_number()
+            .over(partition_by=CheckEvent.tracked_torrent_id, order_by=CheckEvent.created_at.desc())
+            .label("position"),
+        )
+        .where(
+            CheckEvent.tracked_torrent_id.in_(tracked_ids),
+            CheckEvent.event_type.in_(DUTY_OUTCOMES),
+        )
+        .subquery()
     )
-    return [
-        {
-            "kind": DUTY_OUTCOMES[event.event_type],
-            "title": f"{_fmt_dt(event.created_at)} — {EVENT_LABEL.get(event.event_type, event.event_type)}",
-        }
-        for event in reversed(events)
-    ]
+    rows = db.execute(
+        select(ranked.c.tracked_id, ranked.c.event_type, ranked.c.created_at)
+        .where(ranked.c.position <= limit)
+        .order_by(ranked.c.tracked_id, ranked.c.created_at)
+    ).all()
+
+    strips: dict[int, list[dict[str, str]]] = {tracked_id: [] for tracked_id in tracked_ids}
+    for tracked_id, event_type, created_at in rows:
+        strips[tracked_id].append({
+            "kind": DUTY_OUTCOMES[event_type],
+            "title": f"{_fmt_dt(created_at)} — {EVENT_LABEL.get(event_type, event_type)}",
+        })
+    return strips
 
 
 def _watch_state(stats: dict) -> dict[str, str]:
@@ -170,7 +177,13 @@ def logout(request: Request):
 
 @router.get("/")
 def index(request: Request, db: Session = Depends(get_db)):
-    torrents = db.query(TrackedTorrent).order_by(desc(TrackedTorrent.created_at)).all()
+    # joinedload: иначе шаблон дотягивает клиента отдельным запросом на каждую строку.
+    torrents = (
+        db.query(TrackedTorrent)
+        .options(joinedload(TrackedTorrent.qb_client))
+        .order_by(desc(TrackedTorrent.created_at))
+        .all()
+    )
     stats = {
         "total": len(torrents),
         "active": sum(1 for item in torrents if item.status in {TorrentStatus.active.value, TorrentStatus.updated.value}),
@@ -189,7 +202,7 @@ def index(request: Request, db: Session = Depends(get_db)):
             "qb_statuses": qb_statuses,
             "ok_clients": ok_clients,
             "watch": _watch_state(stats),
-            "duty": {item.id: _duty_strip(db, item.id) for item in torrents},
+            "duty": _duty_strips(db, [item.id for item in torrents]),
             "next_check": next_check_at(),
         },
     )
@@ -199,7 +212,7 @@ def index(request: Request, db: Session = Depends(get_db)):
 def add_page(request: Request, db: Session = Depends(get_db)):
     default_client = get_default_qb_client(db)
     clients = list_qb_clients(db)
-    categories, categories_error = _qb_categories(db, default_client.id)
+    categories, categories_error = client_categories(db, default_client.id)
     return templates.TemplateResponse(
         "add.html",
         {
@@ -248,7 +261,7 @@ def add(
         return _redirect(f"/torrents/{tracked.id}")
     except Exception as exc:
         clients = list_qb_clients(db)
-        categories, categories_error = _qb_categories(db, qb_client_id)
+        categories, categories_error = client_categories(db, qb_client_id)
         return templates.TemplateResponse(
             "add.html",
             {
@@ -272,7 +285,7 @@ def detail(request: Request, tracked_id: int, db: Session = Depends(get_db)):
     versions = db.query(TorrentVersion).filter(TorrentVersion.tracked_torrent_id == tracked_id).order_by(desc(TorrentVersion.detected_at)).all()
     events = db.query(CheckEvent).filter(CheckEvent.tracked_torrent_id == tracked_id).order_by(desc(CheckEvent.created_at)).limit(80).all()
     pending_version = latest_pending_version(db, tracked_id)
-    categories, categories_error = _qb_categories(db, tracked.qb_client_id)
+    categories, categories_error = client_categories(db, tracked.qb_client_id)
     return templates.TemplateResponse(
         "detail.html",
         {
@@ -360,21 +373,32 @@ def delete(tracked_id: int, db: Session = Depends(get_db)):
     return _redirect("/")
 
 
-@router.get("/settings")
-def settings_page(request: Request, db: Session = Depends(get_db)):
-    saved = {item.key: item.value for item in db.query(AppSetting).all()}
+def _settings_response(
+    request: Request,
+    db: Session,
+    message: str | None = None,
+    error: str | None = None,
+    status_code: int = 200,
+    refresh_clients: bool = False,
+):
     return templates.TemplateResponse(
         "settings.html",
         {
             "request": request,
             "settings": get_settings(),
-            "saved": saved,
-            "message": None,
-            "error": None,
+            "saved": {item.key: item.value for item in db.query(AppSetting).all()},
+            "message": message,
+            "error": error,
             "qb_clients": list_qb_clients(db),
-            "qb_statuses": client_statuses(db),
+            "qb_statuses": client_statuses(db, refresh=refresh_clients),
         },
+        status_code=status_code,
     )
+
+
+@router.get("/settings")
+def settings_page(request: Request, db: Session = Depends(get_db)):
+    return _settings_response(request, db)
 
 
 @router.post("/settings")
@@ -390,23 +414,9 @@ def save_settings(
         "flaresolver_address": flaresolver_address,
         "flaresolver_port": flaresolver_port,
     }.items():
-        item = db.get(AppSetting, key) or AppSetting(key=key)
-        item.value = value
-        db.merge(item)
+        db.merge(AppSetting(key=key, value=value))
     db.commit()
-    saved = {item.key: item.value for item in db.query(AppSetting).all()}
-    return templates.TemplateResponse(
-        "settings.html",
-        {
-            "request": request,
-            "settings": get_settings(),
-            "saved": saved,
-            "message": "Настройки сохранены.",
-            "error": None,
-            "qb_clients": list_qb_clients(db),
-            "qb_statuses": client_statuses(db),
-        },
-    )
+    return _settings_response(request, db, message="Настройки сохранены.")
 
 
 @router.post("/settings/test-qbittorrent")
@@ -414,24 +424,8 @@ def web_test_qb(request: Request, db: Session = Depends(get_db)):
     client = get_default_qb_client(db)
     result = QBittorrentClient(client).test_connection()
     if result.get("status") == "ok":
-        message = f"Подключение работает, qBittorrent {result.get('version')}"
-        error = None
-    else:
-        message = None
-        error = result.get("error", "qBittorrent недоступен")
-    saved = {item.key: item.value for item in db.query(AppSetting).all()}
-    return templates.TemplateResponse(
-        "settings.html",
-        {
-            "request": request,
-            "settings": get_settings(),
-            "saved": saved,
-            "message": message,
-            "error": error,
-            "qb_clients": list_qb_clients(db),
-            "qb_statuses": client_statuses(db),
-        },
-    )
+        return _settings_response(request, db, message=f"Подключение работает, qBittorrent {result.get('version')}", refresh_clients=True)
+    return _settings_response(request, db, error=result.get("error", "qBittorrent недоступен"), refresh_clients=True)
 
 
 @router.post("/settings/qbittorrent")
@@ -450,20 +444,7 @@ def add_qb_client(
         create_qb_client(db, name, host, username, password, _bool(verify_tls), timeout_seconds, _bool(is_default))
         return _redirect("/settings")
     except Exception as exc:
-        saved = {item.key: item.value for item in db.query(AppSetting).all()}
-        return templates.TemplateResponse(
-            "settings.html",
-            {
-                "request": request,
-                "settings": get_settings(),
-                "saved": saved,
-                "message": None,
-                "error": str(exc),
-                "qb_clients": list_qb_clients(db),
-                "qb_statuses": client_statuses(db),
-            },
-            status_code=400,
-        )
+        return _settings_response(request, db, error=str(exc), status_code=400)
 
 
 @router.post("/settings/qbittorrent/{client_id}/default")

@@ -1,5 +1,6 @@
 import re
 import logging
+import threading
 import time
 from urllib.parse import urlsplit, urlunsplit
 
@@ -15,15 +16,26 @@ from app.services.tracker_resolver import ResolvedTorrent, save_torrent_bytes
 TOPIC_RE = re.compile(r"[?&]t=(\d+)")
 logger = logging.getLogger(__name__)
 
+# FlareSolverr — один браузер на контейнер. Две параллельные проверки заставляют его
+# решать два вызова Cloudflare сразу, и тогда по таймауту падают оба: проверено,
+# последовательно та же раздача проходит. Параллелить можно всё остальное, но не это.
+_flaresolverr_lock = threading.Lock()
 
-def _runtime_setting(key: str, default: str) -> str:
+
+def _runtime_settings(defaults: dict[str, str]) -> dict[str, str]:
+    """Значения из app_settings с падением на .env — за одну сессию на весь резолв."""
     try:
         db = SessionLocal()
-        item = db.get(AppSetting, key)
-        db.close()
-        return item.value.strip() if item and item.value.strip() else default
+        try:
+            saved = {
+                item.key: item.value.strip()
+                for item in db.query(AppSetting).filter(AppSetting.key.in_(defaults)).all()
+            }
+        finally:
+            db.close()
     except Exception:
-        return default
+        saved = {}
+    return {key: saved.get(key) or default for key, default in defaults.items()}
 
 
 def _normalize_cookie(cookie: str) -> str:
@@ -141,14 +153,18 @@ def _download_torrent_until_success(
         try:
             downloader_url = _flaresolverr_downloader_url(flaresolver_endpoint) if flaresolver_endpoint else None
             if downloader_url:
-                content = _download_with_browser(downloader_url, solver_url, download_url, headers["Cookie"])
+                # Блокировка только на время работы браузера: ожидание между попытками
+                # и обычные HTTP-запросы её не держат.
+                with _flaresolverr_lock:
+                    content = _download_with_browser(downloader_url, solver_url, download_url, headers["Cookie"])
             elif flaresolver_endpoint:
-                solved_cookie, solved_user_agent = _solve_with_flaresolverr(
-                    flaresolver_endpoint,
-                    solver_url,
-                    headers["Cookie"],
-                    headers["User-Agent"],
-                )
+                with _flaresolverr_lock:
+                    solved_cookie, solved_user_agent = _solve_with_flaresolverr(
+                        flaresolver_endpoint,
+                        solver_url,
+                        headers["Cookie"],
+                        headers["User-Agent"],
+                    )
                 request_headers = {**headers, "Cookie": solved_cookie, "User-Agent": solved_user_agent}
                 response = requests.get(download_url, headers=request_headers, timeout=30)
                 response.raise_for_status()
@@ -173,15 +189,17 @@ def resolve_rutracker(source_url: str, tracked_id: int | None = None) -> Resolve
     settings = get_settings()
     if not settings.rutracker_enabled:
         raise ValueError("RuTracker resolver отключён")
-    rutracker_cookie = _normalize_cookie(_runtime_setting("rutracker_cookie", settings.rutracker_cookie))
+    runtime = _runtime_settings({
+        "rutracker_cookie": settings.rutracker_cookie,
+        "flaresolver_address": settings.flaresolver_address,
+        "flaresolver_port": str(settings.flaresolver_port),
+    })
+    rutracker_cookie = _normalize_cookie(runtime["rutracker_cookie"])
     if not rutracker_cookie:
         raise ValueError("Для RuTracker нужно задать RUTRACKER_COOKIE")
     if not _has_auth_cookie(rutracker_cookie):
         raise ValueError("RuTracker cookie не содержит авторизационных cookie. Нужен полный Request Header Cookie, а не только cf_clearance.")
-    flaresolver_endpoint = _flaresolver_endpoint(
-        _runtime_setting("flaresolver_address", settings.flaresolver_address),
-        _runtime_setting("flaresolver_port", str(settings.flaresolver_port)),
-    )
+    flaresolver_endpoint = _flaresolver_endpoint(runtime["flaresolver_address"], runtime["flaresolver_port"])
     match = TOPIC_RE.search(source_url)
     if not match:
         raise ValueError("Не удалось определить topic_id RuTracker")

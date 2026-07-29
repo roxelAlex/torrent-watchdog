@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -37,6 +37,24 @@ def save_torrent_bytes(data: bytes, tracked_id: int | None, info_hash: str) -> P
     path = base / f"{info_hash}.torrent"
     path.write_bytes(data)
     return path
+
+
+def adopt_torrent_file(resolved: ResolvedTorrent, tracked_id: int) -> ResolvedTorrent:
+    """Переносит файл из _pending в папку раздачи, когда у неё появился id.
+
+    Позволяет добавлять раздачу за одно скачивание: до вставки в БД id ещё нет,
+    а второй resolve означал бы ещё один проход через FlareSolverr.
+    """
+    if not resolved.torrent_file_path:
+        return resolved
+    source = Path(resolved.torrent_file_path)
+    if not source.exists():
+        return resolved
+    target_dir = get_settings().torrents_dir / str(tracked_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / source.name
+    source.replace(target)
+    return replace(resolved, torrent_file_path=str(target))
 
 
 def resolve_source(source_url: str, tracked_id: int | None = None) -> ResolvedTorrent:

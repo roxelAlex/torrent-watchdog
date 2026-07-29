@@ -20,10 +20,19 @@ class Settings(BaseSettings):
     qb_password: str = "adminadmin"
     qb_verify_tls: bool = False
     qb_timeout_seconds: int = 30
+    # Проба доступности не должна стоить столько же, сколько рабочая операция:
+    # её цена платится при каждом рендере страницы.
+    qb_probe_timeout_seconds: int = 4
+    qb_status_cache_seconds: int = 20
+    qb_categories_cache_seconds: int = 120
 
-    check_interval_hours: int = 24
     check_hour: int = 4
     check_minute: int = 0
+    # Больше потоков — больше одновременных запросов к трекеру и FlareSolverr.
+    check_max_workers: int = 3
+
+    event_retention_days: int = 180
+    torrent_file_retention_days: int = 30
 
     default_auto_update: bool = False
     default_recheck_after_add: bool = True
