@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TorrentCreate(BaseModel):
@@ -25,19 +25,8 @@ class TorrentRead(TorrentCreate):
     status: str
     last_error: str | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TorrentCategoryUpdate(BaseModel):
     category: str = Field(default="", max_length=255)
-
-
-class SettingsUpdate(BaseModel):
-    qb_host: str | None = None
-    qb_username: str | None = None
-    check_hour: int | None = Field(default=None, ge=0, le=23)
-    check_minute: int | None = Field(default=None, ge=0, le=59)
-    rutracker_cookie: str | None = None
-    flaresolver_address: str | None = None
-    flaresolver_port: int | None = Field(default=None, ge=1, le=65535)
