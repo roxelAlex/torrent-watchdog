@@ -41,6 +41,46 @@ def init_db() -> None:
     _migrate_sqlite()
     _ensure_indexes()
     _ensure_default_qbittorrent_client(models)
+    _drop_unused_settings(models)
+    _recover_interrupted_updates(models)
+
+
+def _drop_unused_settings(models) -> None:
+    """Ключи от удалённых полей формы иначе остаются в базе и выглядят настройками."""
+    db = SessionLocal()
+    try:
+        removed = (
+            db.query(models.AppSetting)
+            .filter(models.AppSetting.key.notin_(models.RUNTIME_SETTING_KEYS))
+            .delete(synchronize_session=False)
+        )
+        if removed:
+            db.commit()
+    finally:
+        db.close()
+
+
+def _recover_interrupted_updates(models) -> None:
+    """Статус updating снимается только завершением apply_update.
+
+    Если процесс умер во время применения, раздача осталась бы «обновляется» навсегда —
+    подпись врала бы бессрочно, а причины в журнале не было бы вовсе.
+    """
+    db = SessionLocal()
+    try:
+        stuck = db.query(models.TrackedTorrent).filter(models.TrackedTorrent.status == models.TorrentStatus.updating.value).all()
+        for tracked in stuck:
+            tracked.last_error = "Применение обновления прервано перезапуском сервиса. Проверьте раздачу в qBittorrent и повторите."
+            tracked.status = models.TorrentStatus.error.value
+            db.add(models.CheckEvent(
+                tracked_torrent_id=tracked.id,
+                event_type=models.EventType.update_failed.value,
+                message=tracked.last_error,
+            ))
+        if stuck:
+            db.commit()
+    finally:
+        db.close()
 
 
 def _ensure_indexes() -> None:

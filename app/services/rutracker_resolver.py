@@ -196,7 +196,7 @@ def resolve_rutracker(source_url: str, tracked_id: int | None = None) -> Resolve
     })
     rutracker_cookie = _normalize_cookie(runtime["rutracker_cookie"])
     if not rutracker_cookie:
-        raise ValueError("Для RuTracker нужно задать RUTRACKER_COOKIE")
+        raise ValueError("Не задан cookie RuTracker. Вставьте его на странице «Настройки» или в RUTRACKER_COOKIE в .env.")
     if not _has_auth_cookie(rutracker_cookie):
         raise ValueError("RuTracker cookie не содержит авторизационных cookie. Нужен полный Request Header Cookie, а не только cf_clearance.")
     flaresolver_endpoint = _flaresolver_endpoint(runtime["flaresolver_address"], runtime["flaresolver_port"])

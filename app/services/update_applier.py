@@ -53,10 +53,11 @@ def _wait_for_qb_files(
     ) from last_error
 
 
-def _apply_new_files_only_priorities(qb: QBittorrentClient, torrent_hash: str, diff: dict) -> tuple[int, int]:
+def _apply_new_files_only_priorities(qb: QBittorrentClient, torrent_hash: str, diff: dict) -> tuple[int, int] | None:
+    """None означает, что сравнить состав файлов не с чем и приоритеты не выставлялись."""
     existing = existing_file_keys(diff)
     if not existing:
-        return 0, 0
+        return None
     files = _wait_for_qb_files(qb, torrent_hash)
     skip_ids: list[int] = []
     keep_ids: list[int] = []
@@ -138,8 +139,8 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
             qb.set_category(new_qb_hash, tracked.category)
         if tracked.tags:
             qb.add_tags(new_qb_hash, tracked.tags)
-        skipped = 0
-        selected = 0
+        priorities: tuple[int, int] | None = None
+        comparison_failed = False
         if new_files_only:
             diff = diff_from_json(version.changelog_text)
             if not diff:
@@ -149,7 +150,14 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
                     .first()
                 )
                 diff = build_torrent_diff(current_version.torrent_file_path if current_version else None, version.torrent_file_path)
-            skipped, selected = _apply_new_files_only_priorities(qb, new_qb_hash, diff)
+            priorities = _apply_new_files_only_priorities(qb, new_qb_hash, diff)
+            if priorities is None:
+                # Сравнивать не с чем. Без recheck qBittorrent считает, что на диске пусто,
+                # и качает раздачу заново — ровно то, чего режим должен избегать.
+                # Recheck ничего не удаляет, только сверяет уже лежащие файлы.
+                comparison_failed = True
+                logger.warning("file comparison unavailable id=%s, falling back to recheck hash=%s", tracked_id, new_qb_hash)
+                qb.recheck_torrent(new_qb_hash)
         elif tracked.recheck_after_add:
             qb.recheck_torrent(new_qb_hash)
         if tracked.start_after_recheck:
@@ -164,7 +172,14 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
         tracked.status = TorrentStatus.updated.value
         tracked.last_update_at = datetime.now(timezone.utc)
         tracked.last_error = None
-        if new_files_only:
+        if comparison_failed:
+            message = (
+                "Обновление применено, но сравнить состав файлов с прошлой версией не удалось: "
+                "её сохранённый .torrent недоступен. Приоритеты файлов не выставлялись, вместо этого "
+                "запущен recheck — qBittorrent сверит уже скачанное. Файлы на диске не удалялись."
+            )
+        elif priorities:
+            skipped, selected = priorities
             message = f"Обновление применено в режиме только новых файлов: старых файлов отключено {skipped}, к скачиванию выбрано {selected}. Recheck не запускался."
         else:
             message = "Обновление применено. Файлы на диске не удалялись."

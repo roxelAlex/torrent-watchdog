@@ -15,7 +15,7 @@
   <div class="update-banner">
     <div>
       <strong>Вышла новая версия</strong>
-      <p>{{ version_summary(pending_version) }}</p>
+      <p>{{ version_summary(pending_version, t.update_mode) }}</p>
     </div>
     <form method="post" action="/torrents/{{ t.id }}/apply-update"><button class="primary">Применить обновление</button></form>
   </div>

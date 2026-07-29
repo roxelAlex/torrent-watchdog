@@ -8,6 +8,7 @@
     <label>Ссылка на раздачу
       <input name="source_url" required placeholder="Тема RuTracker, ссылка на .torrent или magnet:">
     </label>
+    <div class="hint">Тема RuTracker и прямая ссылка на <code>.torrent</code> отслеживаются полностью. Magnet-ссылку сервис добавит в qBittorrent, но обновления по ней находить не умеет: у magnet нет файла раздачи, с которым можно сравнить новую версию.</div>
     <label>Клиент qBittorrent
       <select name="qb_client_id" id="qb-client-select">
         {% for client in clients %}
@@ -39,7 +40,7 @@
         <option value="full_recheck">Заменить целиком и проверить файлы</option>
       </select>
     </label>
-    <div class="hint">Для медиатеки подходит первый режим: старые файлы остаются нетронутыми, качаются только добавленные. Второй перекачивает раздачу с проверкой всех файлов.</div>
+    <div class="hint">Для медиатеки подходит первый режим: старые файлы помечаются как «не скачивать», качаются только добавленные, recheck не запускается. Второй заменяет раздачу целиком и запускает recheck — qBittorrent сверит файлы на диске и докачает недостающее.</div>
     <div class="option-grid">
       <label class="check"><input type="checkbox" name="auto_update" {% if settings.default_auto_update %}checked{% endif %}> Обновлять автоматически</label>
       <label class="check"><input type="checkbox" name="recheck_after_add" {% if settings.default_recheck_after_add %}checked{% endif %}> Проверить файлы после добавления</label>

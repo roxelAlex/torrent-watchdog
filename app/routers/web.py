@@ -71,14 +71,19 @@ def _fmt_dt(value) -> str:
     return value.astimezone(ZoneInfo(settings.tz)).strftime("%d.%m.%Y %H:%M")
 
 
-def _version_summary(version: TorrentVersion | None) -> str:
+def _version_summary(version: TorrentVersion | None, update_mode: str = "new_files_only") -> str:
+    """Итог зависит от режима: обещать «не будет перекачиваться» можно только для new_files_only."""
     if not version:
         return ""
     diff = diff_from_json(version.changelog_text)
-    if not diff:
-        return "Новая версия готова к применению."
     new_count = len(diff.get("new", []))
     existing_count = len(diff.get("existing", []))
+    if update_mode != "new_files_only":
+        if new_count:
+            return f"Новых файлов: {new_count}, уже имеющихся: {existing_count}. Раздача будет заменена целиком, qBittorrent сверит файлы на диске."
+        return "Раздача будет заменена целиком, qBittorrent сверит файлы на диске."
+    if not diff or diff.get("mode") == "unknown":
+        return "Сравнить состав файлов с прошлой версией не удалось: её сохранённый .torrent недоступен. Вместо пропуска старых файлов будет запущен recheck."
     if new_count:
         return f"Новых файлов: {new_count}. Уже имеющиеся файлы не будут перекачиваться: {existing_count}."
     return "Состав раздачи изменился, новых файлов по списку не найдено."
@@ -421,11 +426,14 @@ def save_settings(
 
 @router.post("/settings/test-qbittorrent")
 def web_test_qb(request: Request, db: Session = Depends(get_db)):
-    client = get_default_qb_client(db)
-    result = QBittorrentClient(client).test_connection()
-    if result.get("status") == "ok":
-        return _settings_response(request, db, message=f"Подключение работает, qBittorrent {result.get('version')}", refresh_clients=True)
-    return _settings_response(request, db, error=result.get("error", "qBittorrent недоступен"), refresh_clients=True)
+    """Кнопка стоит над списком всех клиентов — значит и проверять должна всех."""
+    statuses = client_statuses(db, refresh=True)
+    if not statuses:
+        return _settings_response(request, db, error="Ни одного клиента qBittorrent не настроено.")
+    offline = [item["name"] for item in statuses if item["status"] != "ok"]
+    if offline:
+        return _settings_response(request, db, error=f"Нет связи: {', '.join(offline)}. Подробности — в карточке клиента.")
+    return _settings_response(request, db, message=f"Все клиенты на связи: {len(statuses)}.")
 
 
 @router.post("/settings/qbittorrent")

@@ -130,3 +130,8 @@ class AppSetting(Base):
 
     key: Mapped[str] = mapped_column(String(255), primary_key=True)
     value: Mapped[str] = mapped_column(Text, default="")
+
+
+# Ключи, которые приложение действительно читает из app_settings. Всё остальное —
+# следы удалённых полей формы: они лежат в базе и выглядят как работающие настройки.
+RUNTIME_SETTING_KEYS = ("rutracker_cookie", "flaresolver_address", "flaresolver_port")
