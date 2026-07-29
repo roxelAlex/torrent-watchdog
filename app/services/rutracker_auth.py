@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 LOGIN_URL = "https://rutracker.org/forum/login.php"
 AUTH_COOKIE_MARKERS = ("bb_session=", "bb_data=", "bb_t=")
+# На страницу входа отдаём только cookie Cloudflare: они помогают пройти проверку.
+# Cookie сессии передавать нельзя — залогиненному пользователю login.php отдаёт
+# страницу вообще без формы входа, и войти заново становится невозможно.
+LOGIN_PAGE_COOKIES = ("cf_clearance", "bb_guid", "bb_ssl")
 
 _login_lock = threading.Lock()
 _last_attempt_at = 0.0
@@ -60,6 +64,13 @@ def _store_cookie(cookie: str) -> None:
         db.close()
 
 
+def cookies_for_login_page(cookie: str) -> list[dict[str, str]]:
+    return [
+        item for item in flaresolverr.cookies_from_header(cookie)
+        if item["name"] in LOGIN_PAGE_COOKIES
+    ]
+
+
 def _login_via_browser(login_endpoint: str, username: str, password: str, cookie: str) -> str:
     response = requests.post(
         login_endpoint,
@@ -67,7 +78,7 @@ def _login_via_browser(login_endpoint: str, username: str, password: str, cookie
             "username": username,
             "password": password,
             "login_url": LOGIN_URL,
-            "cookies": flaresolverr.cookies_from_header(cookie),
+            "cookies": cookies_for_login_page(cookie),
         },
         timeout=150,
     )

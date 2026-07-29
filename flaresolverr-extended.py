@@ -17,6 +17,14 @@ AUTH_COOKIES = ("bb_session", "bb_data", "bb_t")
 CAPTCHA_MARKERS = ("cap_sid", "cap_code", "введите код")
 
 
+class NotATorrent(Exception):
+    """Вместо файла пришла страница — почти всегда это неавторизованная сессия.
+
+    Отдаётся наружу как 401, чтобы приложение могло войти заново и повторить,
+    а не считать это общей поломкой FlareSolverr.
+    """
+
+
 def _wait_for_download(directory: Path, timeout: int = 30) -> Path:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -24,7 +32,8 @@ def _wait_for_download(directory: Path, timeout: int = 30) -> Path:
         if files:
             return files[0]
         time.sleep(0.25)
-    raise RuntimeError("браузер не сохранил .torrent за отведённое время")
+    # Браузер не скачал файл, а отрисовал страницу: скачивать было нечего.
+    raise NotATorrent("браузер не сохранил .torrent — трекер отдал страницу вместо файла")
 
 
 @app.post("/download")
@@ -63,9 +72,12 @@ def download():
         session.driver.get(download_url)
         content = _wait_for_download(directory).read_bytes()
         if not content.startswith(b"d"):
-            raise RuntimeError("вместо .torrent браузер сохранил неожиданный ответ")
+            raise NotATorrent("вместо .torrent браузер сохранил неожиданный ответ")
         response.content_type = "application/x-bittorrent"
         return content
+    except NotATorrent as exc:
+        logging.warning("browser download got a page instead of a file: %s", exc)
+        raise HTTPError(401, str(exc)) from exc
     except Exception as exc:
         logging.exception("browser download failed")
         raise HTTPError(502, str(exc)) from exc
@@ -85,6 +97,10 @@ def _has_captcha(page_source: str) -> bool:
     return any(marker in lowered for marker in CAPTCHA_MARKERS)
 
 
+def _is_logged_in(driver) -> bool:
+    return bool(driver.find_elements(By.XPATH, "//a[contains(@href, 'login.php?logout=')]"))
+
+
 def _submit_login_form(driver, username: str, password: str) -> None:
     """Заполняет и отправляет форму входа.
 
@@ -93,7 +109,10 @@ def _submit_login_form(driver, username: str, password: str) -> None:
     """
     password_inputs = driver.find_elements(By.NAME, "login_password")
     if not password_inputs:
-        raise RuntimeError("на странице нет формы входа")
+        # Чаще всего это значит, что нам подсунули cookie живой сессии: тогда
+        # трекер отдаёт login.php вообще без формы. Заголовок помогает отличить
+        # этот случай от смены вёрстки.
+        raise RuntimeError(f"на странице нет формы входа (заголовок: {driver.title!r})")
     form = password_inputs[-1].find_element(By.XPATH, "./ancestor::form")
 
     username_input = form.find_element(By.NAME, "login_username")
@@ -150,6 +169,11 @@ def login():
         driver = session.driver
         if _has_captcha(driver.page_source):
             return {"status": "captcha", "cookies": [], "message": "трекер запросил капчу на странице входа"}
+        if _is_logged_in(driver):
+            # Сессия из переданных cookie ещё жива — входить не только не нужно,
+            # но и нечем: формы на странице не будет.
+            logging.info("rutracker session already active, login skipped")
+            return {"status": "ok", "cookies": driver.get_cookies(), "message": "сессия уже активна"}
 
         _submit_login_form(driver, username, password)
         result_cookies = _wait_for_auth_cookie(driver)

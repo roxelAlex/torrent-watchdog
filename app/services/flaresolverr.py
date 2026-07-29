@@ -59,11 +59,17 @@ def cookies_from_header(cookie: str) -> list[dict[str, str]]:
 
 
 def cookie_header(cookies: list[dict]) -> str:
-    return "; ".join(
-        f"{item['name']}={item['value']}"
-        for item in cookies
-        if isinstance(item, dict) and item.get("name") and item.get("value") is not None
-    )
+    """Собирает строку Cookie, отбрасывая повторы по имени.
+
+    Браузер отдаёт один и тот же cookie для домена и поддомена (`rutracker.org`
+    и `.rutracker.org`), а дважды названный cookie в заголовке — заявка на
+    неприятности. Побеждает последний: он свежее.
+    """
+    unique: dict[str, str] = {}
+    for item in cookies:
+        if isinstance(item, dict) and item.get("name") and item.get("value") is not None:
+            unique[item["name"]] = item["value"]
+    return "; ".join(f"{name}={value}" for name, value in unique.items())
 
 
 def call(endpoint: str, payload: dict[str, object], timeout: int = 65) -> dict[str, object]:

@@ -30,6 +30,16 @@ def test_cookie_header_skips_broken_entries():
     assert flaresolverr.cookie_header([{"name": "a", "value": "1"}, {"value": "2"}, "мусор"]) == "a=1"
 
 
+def test_cookie_header_deduplicates_by_name():
+    """Браузер отдаёт cf_clearance и для домена, и для поддомена."""
+    cookies = [
+        {"name": "cf_clearance", "value": "старый", "domain": "rutracker.org"},
+        {"name": "bb_session", "value": "1"},
+        {"name": "cf_clearance", "value": "свежий", "domain": ".rutracker.org"},
+    ]
+    assert flaresolverr.cookie_header(cookies) == "cf_clearance=свежий; bb_session=1"
+
+
 def test_extended_url_only_for_own_container():
     endpoint = "http://flaresolverr:8191/v1"
     assert flaresolverr.extended_url(endpoint, "/login") == "http://flaresolverr:8191/login"

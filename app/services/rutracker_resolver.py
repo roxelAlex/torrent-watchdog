@@ -52,8 +52,22 @@ def _download_with_browser(downloader_url: str, source_url: str, download_url: s
         },
         timeout=100,
     )
+    # 401 отдаётся, когда браузеру подсунули страницу вместо файла: проверку
+    # содержимого делает сам endpoint, здесь мы только опознаём его вердикт.
+    if response.status_code == 401:
+        raise SessionExpired(f"RuTracker не отдал .torrent: {_error_text(response)}")
     response.raise_for_status()
     return response.content
+
+
+def _error_text(response: requests.Response) -> str:
+    """Текст ошибки из JSON-ответа: иначе в лог уезжают escape-последовательности."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text.strip()[:200]
+    message = payload.get("error") if isinstance(payload, dict) else None
+    return str(message or payload)[:200]
 
 
 def _fetch_torrent(
