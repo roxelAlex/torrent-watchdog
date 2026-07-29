@@ -60,6 +60,8 @@ MESSAGES = {
     "category.none": "— no category —",
     "category.custom": "— custom category —",
     "category.custom_placeholder": "Name of the new category",
+    "category.custom_path_placeholder": "Path — leave empty to let qBittorrent decide",
+    "category.custom_path_hint": "Without a path, torrents go into a subfolder named after the category inside the client default folder.",
     "category.missing_in_client": "not in the client",
     "path.client_default": "the default",
     "path.of_category": "category {name}",

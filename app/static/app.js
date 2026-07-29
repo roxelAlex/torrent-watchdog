@@ -50,15 +50,16 @@ if (langPicker) {
 // уже введённому тексту, и при заполненном поле в списке оставалась одна строка.
 const categorySelect = document.querySelector("#category-select");
 const categoryCustom = document.querySelector("#category-custom");
+const customBlock = document.querySelector("#category-custom-block");
 const savePathInput = document.querySelector("#save-path-input");
 const savePathList = document.querySelector("#qb-save-paths");
 
 function toggleCustomCategory() {
-  if (!categorySelect || !categoryCustom) return;
+  if (!categorySelect || !customBlock) return;
   const custom = categorySelect.value === categorySelect.dataset.custom;
-  categoryCustom.hidden = !custom;
+  customBlock.hidden = !custom;
   if (custom) categoryCustom.focus();
-  else categoryCustom.value = "";
+  else customBlock.querySelectorAll("input").forEach((field) => { field.value = ""; });
 }
 
 // Папка загрузки и категория не независимы: пустое поле означает «взять путь
@@ -94,8 +95,10 @@ function rebuildCategories(categories) {
   categories.forEach((category) => {
     const option = document.createElement("option");
     option.value = category.name;
-    option.textContent = category.save_path ? `${category.name} — ${category.save_path}` : category.name;
-    if (category.save_path) option.dataset.path = category.save_path;
+    // Путь считает сервер: правило «без своего пути → подпапка с именем» живёт там.
+    const path = category.effective_path || "";
+    option.textContent = path ? `${category.name} — ${path}` : category.name;
+    if (path) option.dataset.path = path;
     categorySelect.appendChild(option);
   });
   if (custom) categorySelect.appendChild(custom);

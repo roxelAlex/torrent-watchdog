@@ -20,9 +20,11 @@ from app.services.qbittorrent_registry import (
     create_qb_client,
     get_fallback_qb_client,
     get_qb_client_config,
+    category_save_path,
     list_qb_clients,
     path_suggestions,
     update_qb_client,
+    with_effective_paths,
 )
 from app import i18n
 from app.errors import localize
@@ -164,16 +166,22 @@ def _chosen_category(choice: str, custom: str) -> str:
     return custom.strip() if choice.strip() == CUSTOM_CATEGORY else choice.strip()
 
 
+def _chosen_category_path(choice: str, custom_path: str) -> str:
+    """Свой путь имеет смысл только для новой категории: у существующей он уже есть."""
+    return custom_path.strip() if choice.strip() == CUSTOM_CATEGORY else ""
+
+
 def _category_context(db: Session, client_id: int | None, current: str) -> dict:
     """Всё, что нужно шаблону для списка категорий и подсказок путей."""
     categories, categories_error = client_categories(db, client_id)
     paths = client_paths(db, client_id)
+    default_save_path = str(paths.get("default_save_path") or "")
     known = [item.get("name") for item in categories]
     return {
-        "categories": categories,
+        "categories": with_effective_paths(categories, default_save_path),
         "categories_error": categories_error,
         "client_paths": paths,
-        "path_suggestions": path_suggestions(categories, str(paths.get("default_save_path") or "")),
+        "path_suggestions": path_suggestions(categories, default_save_path),
         # Категория раздачи могла исчезнуть из клиента — не терять её молча.
         "orphan_category": current if current and current not in known else "",
     }
@@ -188,12 +196,13 @@ def _effective_save_path(tracked: TrackedTorrent, categories: list[dict], client
     """
     if tracked.save_path:
         return {"path": tracked.save_path, "source": "explicit"}
-    match = next((item for item in categories if item.get("name") == tracked.category), None)
-    if match and match.get("save_path"):
-        return {"path": match["save_path"], "source": "category"}
-    if tracked.category:
-        return {"path": client_default, "source": "unknown"}
-    return {"path": client_default, "source": "client"}
+    if not tracked.category:
+        return {"path": client_default, "source": "client"}
+    resolved = category_save_path(tracked.category, categories, client_default)
+    if resolved:
+        return {"path": resolved, "source": "category"}
+    # Категории нет в клиенте — путь не выдумываем.
+    return {"path": "", "source": "unknown"}
 
 
 def _watch_state(stats: dict, language: str) -> dict[str, str]:
@@ -307,6 +316,7 @@ def add(
     save_path: str = Form(""),
     category: str = Form(""),
     category_custom: str = Form(""),
+    category_custom_path: str = Form(""),
     tags: str = Form(""),
     update_mode: str = Form("new_files_only"),
     auto_update: str | None = Form(None),
@@ -315,6 +325,7 @@ def add(
     add_paused: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
+    category_save_path_value = _chosen_category_path(category, category_custom_path)
     category = _chosen_category(category, category_custom)
     payload = TorrentCreate(
         qb_client_id=qb_client_id,
@@ -322,6 +333,7 @@ def add(
         title=title,
         save_path=save_path,
         category=category,
+        category_save_path=category_save_path_value,
         tags=tags,
         update_mode=update_mode,
         auto_update=_bool(auto_update),
@@ -401,11 +413,16 @@ def change_category(
     tracked_id: int,
     category: str = Form(""),
     category_custom: str = Form(""),
+    category_custom_path: str = Form(""),
     db: Session = Depends(get_db),
 ):
     try:
         language = current_language(request)
-        tracked = change_torrent_category(db, tracked_id, _chosen_category(category, category_custom))
+        tracked = change_torrent_category(
+            db, tracked_id,
+            _chosen_category(category, category_custom),
+            _chosen_category_path(category, category_custom_path),
+        )
         request.session["message"] = i18n.translate(
             "detail.category_saved", language,
             category=tracked.category or i18n.translate("category.unset", language),

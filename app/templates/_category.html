@@ -5,13 +5,17 @@
         <option value="{{ orphan_category }}" selected>{{ orphan_category }} — {{ t("category.missing_in_client") }}</option>
         {% endif %}
         {% for category in categories %}
-        <option value="{{ category.name }}" data-path="{{ category.save_path }}"
+        <option value="{{ category.name }}" data-path="{{ category.effective_path }}"
                 {% if category.name == current %}selected{% endif %}>
-          {{ category.name }}{% if category.save_path %} — {{ category.save_path }}{% endif %}
+          {{ category.name }}{% if category.effective_path %} — {{ category.effective_path }}{% endif %}
         </option>
         {% endfor %}
         <option value="__custom__">{{ t("category.custom") }}</option>
       </select>
-      <input name="category_custom" id="category-custom" class="category-custom" hidden
-             placeholder="{{ t('category.custom_placeholder') }}">
+      <div class="category-custom" id="category-custom-block" hidden>
+        <input name="category_custom" id="category-custom" placeholder="{{ t('category.custom_placeholder') }}">
+        <input name="category_custom_path" id="category-custom-path"
+               placeholder="{{ t('category.custom_path_placeholder') }}">
+        <span class="hint">{{ t("category.custom_path_hint") }}</span>
+      </div>
 {%- endmacro %}

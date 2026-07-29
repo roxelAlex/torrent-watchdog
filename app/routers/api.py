@@ -7,7 +7,14 @@ from app.db import get_db
 from app.models import CheckEvent, TorrentStatus, TrackedTorrent
 from app.schemas import TorrentCategoryUpdate, TorrentCreate, TorrentRead
 from app.services.qbittorrent_client import QBittorrentClient
-from app.services.qbittorrent_registry import client_paths, client_statuses, get_qb_client_config, list_qb_clients, path_suggestions
+from app.services.qbittorrent_registry import (
+    client_paths,
+    client_statuses,
+    get_qb_client_config,
+    list_qb_clients,
+    path_suggestions,
+    with_effective_paths,
+)
 from app.services.rutracker_resolver import resolve_rutracker
 from app.services.torrent_settings import change_torrent_category
 from app.services.update_applier import apply_update
@@ -94,11 +101,11 @@ def qbittorrent_categories(client_id: int | None = None, db: Session = Depends(g
         qb = QBittorrentClient(get_qb_client_config(db, client_id))
         qb.login()
         categories = qb.get_categories()
-        paths = client_paths(db, client_id)
+        default_save_path = str(client_paths(db, client_id).get("default_save_path") or "")
         return {
             "status": "ok",
-            "categories": categories,
-            "paths": path_suggestions(categories, str(paths.get("default_save_path") or "")),
+            "categories": with_effective_paths(categories, default_save_path),
+            "paths": path_suggestions(categories, default_save_path),
         }
     except Exception as exc:
         return {"status": "unavailable", "categories": [], "paths": [], "error": str(exc)}

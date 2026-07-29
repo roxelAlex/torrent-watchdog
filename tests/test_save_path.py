@@ -32,10 +32,10 @@ def test_empty_path_falls_back_to_category():
     assert result == {"path": "/music", "source": "category"}
 
 
-def test_category_without_path_is_reported_as_such():
-    """Категория есть, но своего пути у неё нет — угадывать нечего."""
-    result = _effective_save_path(torrent(category="lidarr"), CATEGORIES)
-    assert result == {"path": "", "source": "unknown"}
+def test_category_without_path_resolves_to_its_subfolder():
+    """qBittorrent кладёт такие раздачи в подпапку с именем категории."""
+    result = _effective_save_path(torrent(category="lidarr"), CATEGORIES, client_default="/downloads")
+    assert result == {"path": "/downloads/lidarr", "source": "category"}
 
 
 def test_no_category_means_client_default():
@@ -49,9 +49,10 @@ def test_client_default_path_is_used_when_known():
     assert result == {"path": "/downloads", "source": "client"}
 
 
-def test_category_without_path_falls_back_to_client_default():
-    result = _effective_save_path(torrent(category="lidarr"), CATEGORIES, client_default="/downloads")
-    assert result == {"path": "/downloads", "source": "unknown"}
+def test_unknown_category_gives_no_path_even_with_a_default():
+    """Категории нет в клиенте — куда лягут файлы, неизвестно."""
+    result = _effective_save_path(torrent(category="исчезнувшая"), CATEGORIES, client_default="/downloads")
+    assert result == {"path": "", "source": "unknown"}
 
 
 def test_explicit_path_ignores_client_default():

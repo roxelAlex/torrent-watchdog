@@ -7,6 +7,8 @@ class TorrentCreate(BaseModel):
     title: str | None = None
     save_path: str = ""
     category: str = ""
+    # Путь только для создаваемой категории: у существующей он уже задан.
+    category_save_path: str = ""
     tags: str = ""
     auto_update: bool = False
     recheck_after_add: bool = True

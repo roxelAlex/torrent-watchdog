@@ -191,11 +191,42 @@ def client_paths(db: Session, client_id: int | None = None) -> dict[str, object]
     return _paths_cache.get_or_set(f"{config.id}:{config.host}:{config.updated_at}", fetch)
 
 
+def category_save_path(category: str, categories: list[dict], default_save_path: str) -> str:
+    """Куда qBittorrent реально кладёт раздачи этой категории.
+
+    У категории без собственного пути раздачи уходят в подпапку с её именем
+    внутри пути по умолчанию. Проверено на живых клиентах: lidarr и radarr без
+    пути дают /downloads/lidarr и /downloads/radarr. Показывать для них просто
+    /downloads было бы неправдой.
+
+    Для категории, которой в клиенте нет, путь не угадываем — возвращаем пусто.
+    """
+    if not category:
+        return default_save_path
+    match = next((item for item in categories if item.get("name") == category), None)
+    if match is None:
+        return ""
+    own = (match.get("save_path") or "").strip()
+    if own:
+        return own
+    if not default_save_path:
+        return ""
+    return f"{default_save_path.rstrip('/')}/{category}"
+
+
+def with_effective_paths(categories: list[dict], default_save_path: str = "") -> list[dict]:
+    """Категории с добавленным полем «куда на самом деле»."""
+    return [
+        {**item, "effective_path": category_save_path(item.get("name", ""), categories, default_save_path)}
+        for item in categories
+    ]
+
+
 def path_suggestions(categories: list[dict], default_save_path: str = "") -> list[dict[str, str]]:
     """Пути, которые клиент уже знает: свой по умолчанию и пути категорий.
 
-    Ничего не выдумываем — только то, что вернул сам qBittorrent. Категории без
-    своего пути пропускаем: подсказывать пустую строку незачем.
+    Ничего не выдумываем — только то, что следует из ответов qBittorrent.
+    Подсказываем итоговые пути, включая подпапки категорий без своего пути.
     """
     suggestions: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -203,7 +234,7 @@ def path_suggestions(categories: list[dict], default_save_path: str = "") -> lis
         suggestions.append({"path": default_save_path, "kind": "default", "category": ""})
         seen.add(default_save_path)
     for item in categories:
-        path = (item.get("save_path") or "").strip()
+        path = category_save_path(item.get("name", ""), categories, default_save_path)
         if not path or path in seen:
             continue
         seen.add(path)
@@ -211,13 +242,17 @@ def path_suggestions(categories: list[dict], default_save_path: str = "") -> lis
     return suggestions
 
 
-def ensure_category(qb: QBittorrentClient, name: str) -> None:
-    """Заводит категорию, если её ещё нет. Пустое имя — это «без категории»."""
+def ensure_category(qb: QBittorrentClient, name: str, save_path: str = "") -> None:
+    """Заводит категорию, если её ещё нет. Пустое имя — это «без категории».
+
+    Пустой save_path означает «пусть qBittorrent решает»: он положит раздачи
+    в подпапку с именем категории внутри пути по умолчанию.
+    """
     if not name:
         return
     if any(item.get("name") == name for item in qb.get_categories()):
         return
-    qb.create_category(name)
+    qb.create_category(name, save_path.strip())
     invalidate_qb_caches()
 
 

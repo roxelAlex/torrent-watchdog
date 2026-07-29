@@ -51,7 +51,7 @@ def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
         qb = QBittorrentClient(qb_config)
         qb.login()
         # Своя категория должна существовать до добавления: иначе раздача осядет без неё.
-        ensure_category(qb, payload.category)
+        ensure_category(qb, payload.category, getattr(payload, "category_save_path", ""))
         qb_hash = qb.add_torrent_file(resolved.torrent_file_path or "", payload.save_path, payload.category, payload.tags, payload.add_paused)
         tracked.current_qb_hash = qb_hash
         db.commit()

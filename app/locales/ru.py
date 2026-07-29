@@ -60,6 +60,8 @@ MESSAGES = {
     "category.none": "— без категории —",
     "category.custom": "— своя категория —",
     "category.custom_placeholder": "Название новой категории",
+    "category.custom_path_placeholder": "Путь — пусто, чтобы qBittorrent выбрал сам",
+    "category.custom_path_hint": "Без пути раздачи лягут в подпапку с именем категории внутри папки клиента по умолчанию.",
     "category.missing_in_client": "нет в клиенте",
     "path.client_default": "по умолчанию",
     "path.of_category": "категория {name}",

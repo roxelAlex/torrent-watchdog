@@ -12,7 +12,7 @@ from app.services.qbittorrent_registry import ensure_category, get_qb_client_con
 logger = logging.getLogger(__name__)
 
 
-def change_torrent_category(db: Session, tracked_id: int, category: str) -> TrackedTorrent:
+def change_torrent_category(db: Session, tracked_id: int, category: str, category_save_path: str = "") -> TrackedTorrent:
     tracked = db.get(TrackedTorrent, tracked_id)
     if not tracked:
         raise InvalidInput("error.torrent.not_found")
@@ -26,7 +26,7 @@ def change_torrent_category(db: Session, tracked_id: int, category: str) -> Trac
     if not qb.get_torrent(tracked.current_qb_hash):
         raise ServiceUnavailable("error.torrent.not_in_client", client=qb_config.name)
 
-    ensure_category(qb, normalized_category)
+    ensure_category(qb, normalized_category, category_save_path)
     qb.set_category(tracked.current_qb_hash, normalized_category)
     old_category = tracked.category
     tracked.category = normalized_category
