@@ -2,13 +2,15 @@
 {% block content %}
 <section class="panel narrow">
   <p class="eyebrow">Новая раздача</p>
-  <h1>Взять раздачу под наблюдение</h1>
+  <h1>Взять тему под наблюдение</h1>
   {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
   <form class="form" method="post" action="/add">
-    <label>Ссылка на раздачу
-      <input name="source_url" required placeholder="Тема RuTracker, ссылка на .torrent или magnet:">
+    <label>Ссылка на тему RuTracker
+      <input name="source_url" required type="url" pattern="https?://.*rutracker\.org/.*[?&amp;]t=\d+.*"
+             title="Ссылка на тему RuTracker, например https://rutracker.org/forum/viewtopic.php?t=123456"
+             placeholder="https://rutracker.org/forum/viewtopic.php?t=123456">
     </label>
-    <div class="hint">Тема RuTracker и прямая ссылка на <code>.torrent</code> отслеживаются полностью. Magnet-ссылку сервис добавит в qBittorrent, но обновления по ней находить не умеет: у magnet нет файла раздачи, с которым можно сравнить новую версию.</div>
+    <div class="hint">Нужна ссылка на тему целиком: с неё сервис каждый раз скачивает свежий <code>.torrent</code> и сравнивает состав файлов с прошлой версией. Magnet и прямые ссылки на <code>.torrent</code> не принимаются.</div>
     <label>Клиент qBittorrent
       <select name="qb_client_id" id="qb-client-select">
         {% for client in clients %}

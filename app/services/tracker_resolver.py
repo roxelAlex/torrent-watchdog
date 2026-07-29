@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import urlparse
@@ -15,6 +16,28 @@ class ResolvedTorrent:
     torrent_file_path: str | None
     source_type: str
     tracker_type: str
+
+
+RUTRACKER_TOPIC_RE = re.compile(r"[?&]t=(\d+)")
+RUTRACKER_TOPIC_HINT = (
+    "Нужна ссылка на тему RuTracker вида https://rutracker.org/forum/viewtopic.php?t=123456. "
+    "Magnet и прямые ссылки на .torrent не принимаются."
+)
+
+
+def normalize_source_url(source_url: str) -> str:
+    """Под наблюдение берутся только темы RuTracker.
+
+    С темы каждый раз скачивается свежий .torrent, поэтому есть с чем сравнивать
+    состав файлов. У magnet файла раздачи нет вовсе, а остальные источники
+    сервис намеренно не отслеживает.
+    """
+    url = source_url.strip()
+    if not url:
+        raise ValueError(RUTRACKER_TOPIC_HINT)
+    if detect_tracker_type(url) != "rutracker" or not RUTRACKER_TOPIC_RE.search(url):
+        raise ValueError(RUTRACKER_TOPIC_HINT)
+    return url
 
 
 def detect_source_type(source_url: str) -> str:

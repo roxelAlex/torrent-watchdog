@@ -8,7 +8,7 @@ from app.models import CheckEvent, EventType, TorrentStatus, TorrentVersion, Tra
 from app.services.qbittorrent_client import QBittorrentClient
 from app.services.qbittorrent_registry import get_qb_client_config
 from app.services.torrent_diff import build_torrent_diff, diff_to_json
-from app.services.tracker_resolver import adopt_torrent_file, resolve_source
+from app.services.tracker_resolver import adopt_torrent_file, normalize_source_url, resolve_source
 from app.services.update_applier import apply_update
 from app.utils import mask_url
 
@@ -16,12 +16,14 @@ logger = logging.getLogger(__name__)
 
 
 def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
-    resolved = resolve_source(payload.source_url, tracked_id=None)
+    # Единственная точка входа для веба и API: проверяем источник здесь.
+    source_url = normalize_source_url(payload.source_url)
+    resolved = resolve_source(source_url, tracked_id=None)
     qb_config = get_qb_client_config(db, payload.qb_client_id)
     tracked = TrackedTorrent(
         qb_client_id=qb_config.id,
-        title=payload.title or resolved.torrent_name or payload.source_url,
-        source_url=payload.source_url,
+        title=payload.title or resolved.torrent_name or source_url,
+        source_url=source_url,
         source_type=resolved.source_type,
         tracker_type=resolved.tracker_type,
         current_info_hash=resolved.info_hash,
@@ -46,10 +48,7 @@ def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
     try:
         qb = QBittorrentClient(qb_config)
         qb.login()
-        if resolved.source_type == "magnet":
-            qb_hash = qb.add_magnet(payload.source_url, payload.save_path, payload.category, payload.tags, payload.add_paused)
-        else:
-            qb_hash = qb.add_torrent_file(resolved.torrent_file_path or "", payload.save_path, payload.category, payload.tags, payload.add_paused)
+        qb_hash = qb.add_torrent_file(resolved.torrent_file_path or "", payload.save_path, payload.category, payload.tags, payload.add_paused)
         tracked.current_qb_hash = qb_hash
         db.commit()
         if payload.recheck_after_add:
@@ -66,7 +65,7 @@ def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
             info_hash=resolved.info_hash,
             torrent_name=resolved.torrent_name,
             torrent_file_path=resolved.torrent_file_path,
-            source_url=payload.source_url,
+            source_url=source_url,
             is_current=True,
         ))
         db.add(CheckEvent(
@@ -87,7 +86,7 @@ def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
         info_hash=resolved.info_hash,
         torrent_name=resolved.torrent_name,
         torrent_file_path=resolved.torrent_file_path,
-        source_url=payload.source_url,
+        source_url=source_url,
         applied_at=datetime.now(timezone.utc),
         is_current=True,
     )
