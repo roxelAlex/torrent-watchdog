@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "torrent-watchdog" }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">TW</span><span>torrent-watchdog</span></a>
+    <nav>
+      <a href="/">Раздачи</a>
+      <a href="/add">Добавить</a>
+      <a href="/settings">Настройки</a>
+      <a href="/logs">Логи</a>
+      <form method="post" action="/logout" class="logout"><button>Выйти</button></form>
+    </nav>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">{{ app_name }} v{{ app_version }}</footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

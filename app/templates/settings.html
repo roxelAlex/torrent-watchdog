@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>Настройки</h1>
+  {% if message %}<div class="alert ok">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Клиенты</p>
+      <h2>qBittorrent</h2>
+    </div>
+  </div>
+  <div class="client-grid">
+    {% for client in qb_clients %}
+    {% set status = (qb_statuses | selectattr("id", "equalto", client.id|string) | list | first) %}
+    <div class="client-card {{ 'ok' if status and status.status == 'ok' else 'bad' }}">
+      <div>
+        <strong>{{ client.name }}</strong>
+        {% if client.is_default %}<span class="pill">по умолчанию</span>{% endif %}
+      </div>
+      <span>{{ client.host }}</span>
+      <small>{{ "работает" if status and status.status == "ok" else "нет связи" }}{% if status and status.version %} · {{ status.version }}{% endif %}</small>
+      {% if not client.is_default %}
+      <form method="post" action="/settings/qbittorrent/{{ client.id }}/default"><button>Сделать основным</button></form>
+      {% endif %}
+      <details class="mini-edit">
+        <summary>Изменить</summary>
+        <form class="form compact" method="post" action="/settings/qbittorrent/{{ client.id }}">
+          <label>Название<input name="name" value="{{ client.name }}" required></label>
+          <label>Адрес<input name="host" value="{{ client.host }}" required></label>
+          <label>Логин<input name="username" value="{{ client.username }}"></label>
+          <label>Новый пароль<input name="password" type="password" placeholder="Оставьте пустым, чтобы не менять"></label>
+          <label>Таймаут<input name="timeout_seconds" type="number" min="3" value="{{ client.timeout_seconds }}"></label>
+          <label class="check"><input type="checkbox" name="verify_tls" {% if client.verify_tls %}checked{% endif %}> Проверять TLS</label>
+          <button>Сохранить</button>
+        </form>
+      </details>
+    </div>
+    {% endfor %}
+  </div>
+
+  <details class="technical add-client">
+    <summary>Добавить qBittorrent-клиент</summary>
+    <form class="form" method="post" action="/settings/qbittorrent">
+      <label>Название<input name="name" required placeholder="Домашний сервер"></label>
+      <label>Адрес<input name="host" required placeholder="http://192.168.1.154:8080"></label>
+      <label>Логин<input name="username"></label>
+      <label>Пароль<input name="password" type="password"></label>
+      <label>Таймаут, сек<input name="timeout_seconds" type="number" min="3" value="30"></label>
+      <label class="check"><input type="checkbox" name="verify_tls"> Проверять TLS</label>
+      <label class="check"><input type="checkbox" name="is_default"> Сделать основным</label>
+      <button class="primary">Добавить клиент</button>
+    </form>
+  </details>
+</section>
+
+<section class="panel narrow">
+  <h2>Расписание и RuTracker</h2>
+  <form class="form" method="post" action="/settings">
+    <label>Час проверки<input name="check_hour" type="number" min="0" max="23" value="{{ saved.check_hour or settings.check_hour }}"></label>
+    <label>Минута проверки<input name="check_minute" type="number" min="0" max="59" value="{{ saved.check_minute or settings.check_minute }}"></label>
+    <label>RuTracker cookies<textarea name="rutracker_cookie" rows="5">{{ saved.rutracker_cookie or "" }}</textarea></label>
+    <label>Адрес FlareSolverr<input name="flaresolver_address" placeholder="http://192.168.1.10" value="{{ saved.flaresolver_address or settings.flaresolver_address }}"></label>
+    <label>Порт FlareSolverr<input name="flaresolver_port" type="number" min="1" max="65535" value="{{ saved.flaresolver_port or settings.flaresolver_port }}"></label>
+    <div class="hint">Оставьте адрес пустым, чтобы скачивать RuTracker напрямую.</div>
+    <button class="primary">Сохранить</button>
+  </form>
+  <div class="hint">Расписание сейчас: {{ settings.check_hour }}:{{ "%02d"|format(settings.check_minute) }}, TZ {{ settings.tz }}.</div>
+</section>
+{% endblock %}

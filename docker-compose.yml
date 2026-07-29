@@ -1,0 +1,26 @@
+services:
+  flaresolverr:
+    build:
+      context: .
+      dockerfile: Dockerfile.flaresolverr
+    image: torrent-watchdog-flaresolverr
+    container_name: torrent-watchdog-flaresolverr
+    environment:
+      - TZ=${TZ:-Asia/Yekaterinburg}
+      - LOG_LEVEL=info
+    restart: unless-stopped
+
+  torrent-watchdog:
+    build: .
+    container_name: torrent-watchdog
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT:-8096}:${APP_PORT:-8096}"
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=${TZ:-Asia/Yekaterinburg}
+    depends_on:
+      - flaresolverr
+    restart: unless-stopped

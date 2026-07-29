@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Раздача #{{ t.id }}</p>
+      <h1><span class="beacon big {{ t.status }}"></span>{{ t.title }}</h1>
+    </div>
+    <span class="status {{ t.status }}">{{ status_label.get(t.status, t.status) }}</span>
+  </div>
+  {% if message %}<div class="alert ok">{{ message }}</div>{% endif %}
+  {% if action_error %}<div class="alert error">{{ action_error }}</div>{% endif %}
+  {% if t.last_error %}<div class="alert error">{{ t.last_error }}</div>{% endif %}
+  {% if t.status == "update_available" %}
+  <div class="update-banner">
+    <div>
+      <span class="beacon update_available"></span>
+      <strong>Есть обновление раздачи</strong>
+      <p>{{ version_summary(pending_version) }}</p>
+    </div>
+    <form method="post" action="/torrents/{{ t.id }}/apply-update"><button class="primary">Применить</button></form>
+  </div>
+  {% endif %}
+  <div class="quick-facts">
+    <div><span>Клиент</span><strong>{{ t.qb_client.name if t.qb_client else "Основной" }}</strong></div>
+    <div><span>Категория</span><strong>{{ t.category or "без категории" }}</strong></div>
+    <div><span>Обновление</span><strong>{{ "только новые файлы" if t.update_mode == "new_files_only" else "полная проверка" }}</strong></div>
+    <div><span>Последняя проверка</span><strong>{{ t.last_check_at|dt }}</strong></div>
+  </div>
+  <details class="technical">
+    <summary>Технические сведения</summary>
+    <dl class="details">
+      <dt>Источник</dt><dd><a href="{{ t.source_url }}">{{ t.source_url }}</a></dd>
+      <dt>Info hash</dt><dd class="mono">{{ t.current_info_hash or "-" }}</dd>
+      <dt>qBittorrent hash</dt><dd class="mono">{{ t.current_qb_hash or "-" }}</dd>
+      <dt>Путь</dt><dd>{{ t.save_path or "-" }}</dd>
+      <dt>Теги</dt><dd>{{ t.tags or "-" }}</dd>
+      <dt>Auto update</dt><dd>{{ "включён" if t.auto_update else "выключен" }}</dd>
+      <dt>Режим обновления</dt><dd>{{ t.update_mode }}</dd>
+      <dt>Последнее обновление</dt><dd>{{ t.last_update_at|dt }}</dd>
+    </dl>
+  </details>
+  <form class="category-editor" method="post" action="/torrents/{{ t.id }}/category">
+    <label>
+      Категория qBittorrent
+      <input name="category" value="{{ t.category }}" list="torrent-categories" placeholder="Без категории">
+      <datalist id="torrent-categories">
+        {% for category in categories %}
+        <option value="{{ category.name }}" label="{{ category.save_path }}"></option>
+        {% endfor %}
+      </datalist>
+    </label>
+    <button type="submit">Сохранить категорию</button>
+    {% if categories_error %}
+    <span class="hint">Список категорий недоступен: {{ categories_error }}</span>
+    {% endif %}
+  </form>
+  <div class="actions block">
+    <form method="post" action="/torrents/{{ t.id }}/check"><button class="primary">Проверить сейчас</button></form>
+    <form method="post" action="/torrents/{{ t.id }}/apply-update"><button>Применить найденное обновление</button></form>
+    <form method="post" action="/torrents/{{ t.id }}/toggle-auto-update"><button>Переключить auto_update</button></form>
+    {% if t.status == "disabled" %}
+    <form method="post" action="/torrents/{{ t.id }}/enable"><button>Включить отслеживание</button></form>
+    {% else %}
+    <form method="post" action="/torrents/{{ t.id }}/disable"><button>Отключить отслеживание</button></form>
+    {% endif %}
+    <form method="post" action="/torrents/{{ t.id }}/delete" data-confirm="Удалить запись? Файлы и qBittorrent данные не удаляются."><button class="danger">Удалить из отслеживания</button></form>
+  </div>
+</section>
+
+<section class="panel collapsed-panel">
+  <h2>История версий</h2>
+  <div class="table versions">
+    <div class="row head"><div>Версия</div><div>Обнаружено</div><div>Применено</div><div>Текущая</div><div></div></div>
+    {% for v in versions %}
+    <div class="row">
+      <div data-label="Версия">{{ v.torrent_name or "Сохранённая версия" }}</div>
+      <div data-label="Обнаружено">{{ v.detected_at|dt }}</div>
+      <div data-label="Применено">{{ v.applied_at|dt }}</div>
+      <div data-label="Текущая">{{ "да" if v.is_current else "нет" }}</div>
+      <div data-label="Действие">
+        {% if not v.is_current and v.torrent_file_path %}
+        <form method="post" action="/torrents/{{ t.id }}/rollback/{{ v.id }}"><button>Вернуть эту версию</button></form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel collapsed-panel">
+  <h2>История событий</h2>
+  <div class="events">
+    {% for e in events %}
+    <div class="event {{ e.event_type }}"><time>{{ e.created_at|dt }}</time><strong>{{ event_label.get(e.event_type, e.event_type) }}</strong><span>{{ e.message }}</span></div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

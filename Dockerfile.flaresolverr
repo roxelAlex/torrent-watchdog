@@ -1,0 +1,11 @@
+FROM ghcr.io/flaresolverr/flaresolverr:latest
+
+USER root
+COPY flaresolverr-extended.py /app/flaresolverr-extended.py
+COPY flaresolverr-start.sh /app/flaresolverr-start.sh
+
+RUN chmod +x /app/flaresolverr-start.sh
+
+USER flaresolverr
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+CMD ["/app/flaresolverr-start.sh"]

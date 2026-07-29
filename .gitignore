@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+.env
+
+data/*
+!data/.gitkeep
+!data/torrents/
+data/torrents/*
+!data/torrents/.gitkeep
