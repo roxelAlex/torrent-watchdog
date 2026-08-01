@@ -61,7 +61,9 @@
       <label class="check"><input type="checkbox" name="recheck_after_add" {% if settings.default_recheck_after_add %}checked{% endif %}> {{ t("add.recheck_after_add") }}</label>
       <label class="check"><input type="checkbox" name="start_after_recheck" {% if settings.default_start_after_recheck %}checked{% endif %}> {{ t("add.start_after_recheck") }}</label>
       <label class="check"><input type="checkbox" name="add_paused" {% if settings.default_add_paused %}checked{% endif %}> {{ t("add.add_paused") }}</label>
+      <label class="check"><input type="checkbox" name="delete_replaced_files" {% if settings.default_delete_replaced_files %}checked{% endif %}> {{ t("add.delete_replaced") }}</label>
     </div>
+    <div class="hint">{{ t("add.delete_replaced_hint") }}</div>
     <button class="primary">{{ t("add.submit") }}</button>
   </form>
 </section>

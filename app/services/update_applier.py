@@ -75,6 +75,41 @@ def _apply_new_files_only_priorities(qb: QBittorrentClient, torrent_hash: str, d
     return len(skip_ids), len(keep_ids)
 
 
+def _sample_names(files: list[dict], limit: int = 5) -> str:
+    """Несколько имён для узнаваемости: полный список бывает и в 484 файла."""
+    names = [str(item.get("path", "")) for item in files[:limit] if item.get("path")]
+    tail = f" и ещё {len(files) - len(names)}" if len(files) > len(names) else ""
+    return ", ".join(names) + tail
+
+
+def may_remove_replaced_files(
+    tracked: TrackedTorrent,
+    diff: dict,
+    new_info_hash: str,
+    allow_file_removal: bool,
+) -> bool:
+    """Можно ли удалить файлы прошлой версии.
+
+    Единственный случай, где сервис вообще трогает данные пользователя, поэтому
+    все условия проверяются вместе и любое несошедшееся означает «не трогать»:
+
+    * признак включён у самой раздачи;
+    * это не откат — при нём выбывшие файлы как раз те, ради которых он делается;
+    * состав сравнить удалось (mode == file_list), иначе мы просто не знаем;
+    * не совпал ни один файл — то есть раздачу пересобрали целиком;
+    * прежний торрент существует и отличается от нового.
+    """
+    if not tracked.delete_replaced_files or not allow_file_removal:
+        return False
+    if diff.get("mode") != "file_list":
+        return False
+    if existing_file_keys(diff):
+        return False
+    if not tracked.current_qb_hash or tracked.current_qb_hash.lower() == new_info_hash.lower():
+        return False
+    return True
+
+
 def _add_or_reuse_torrent(
     qb: QBittorrentClient,
     torrent_file_path: str,
@@ -98,7 +133,7 @@ def _add_or_reuse_torrent(
         return info_hash.lower()
 
 
-def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorrent:
+def apply_update(db: Session, tracked_id: int, version_id: int, allow_file_removal: bool = True) -> TrackedTorrent:
     tracked = db.get(TrackedTorrent, tracked_id)
     version = db.get(TorrentVersion, version_id)
     if not tracked or not version or version.tracked_torrent_id != tracked_id:
@@ -121,11 +156,26 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
                    client=qb_config.name, error=qb_status.get("error"))
             raise ServiceUnavailable("error.qb.unavailable", client=qb_config.name, error=qb_status.get("error"))
         qb.login()
-        if tracked.current_qb_hash and tracked.current_qb_hash.lower() != version.info_hash.lower():
-            logger.info("pause old torrent id=%s hash=%s", tracked.id, tracked.current_qb_hash)
-            qb.pause_torrent(tracked.current_qb_hash)
-            logger.info("delete old torrent id=%s hash=%s deleteFiles=false", tracked.id, tracked.current_qb_hash)
-            qb.delete_torrent(tracked.current_qb_hash, delete_files=False)
+
+        # Дифф нужен раньше обычного: от него зависит, удалять ли файлы прошлой версии.
+        diff = diff_from_json(version.changelog_text)
+        if not diff:
+            previous = (
+                db.query(TorrentVersion)
+                .filter(TorrentVersion.tracked_torrent_id == tracked_id, TorrentVersion.is_current.is_(True))
+                .first()
+            )
+            diff = build_torrent_diff(previous.torrent_file_path if previous else None, version.torrent_file_path)
+        remove_old_files = may_remove_replaced_files(tracked, diff, version.info_hash, allow_file_removal)
+
+        old_qb_hash = tracked.current_qb_hash
+        replaces_old = bool(old_qb_hash and old_qb_hash.lower() != version.info_hash.lower())
+        if replaces_old:
+            logger.info("pause old torrent id=%s hash=%s", tracked.id, old_qb_hash)
+            qb.pause_torrent(old_qb_hash)
+            if not remove_old_files:
+                logger.info("delete old torrent id=%s hash=%s deleteFiles=false", tracked.id, old_qb_hash)
+                qb.delete_torrent(old_qb_hash, delete_files=False)
 
         new_files_only = tracked.update_mode == "new_files_only"
         new_qb_hash = _add_or_reuse_torrent(
@@ -137,6 +187,18 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
             tracked.tags,
             paused=True if new_files_only else tracked.add_paused,
         )
+        removed_files = 0
+        if remove_old_files:
+            # Сначала убеждаемся, что замена на месте: если добавление упадёт, данные
+            # уже были бы уничтожены, а взамен ничего.
+            _wait_for_qb_files(qb, new_qb_hash)
+            removed_files = len(diff.get("removed", []))
+            logger.warning(
+                "delete old torrent id=%s hash=%s deleteFiles=true files=%s",
+                tracked.id, old_qb_hash, removed_files,
+            )
+            qb.delete_torrent(old_qb_hash, delete_files=True)
+
         if tracked.category:
             qb.set_category(new_qb_hash, tracked.category)
         if tracked.tags:
@@ -145,14 +207,6 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
         comparison_failed = False
         nothing_in_common = False
         if new_files_only:
-            diff = diff_from_json(version.changelog_text)
-            if not diff:
-                current_version = (
-                    db.query(TorrentVersion)
-                    .filter(TorrentVersion.tracked_torrent_id == tracked_id, TorrentVersion.is_current.is_(True))
-                    .first()
-                )
-                diff = build_torrent_diff(current_version.torrent_file_path if current_version else None, version.torrent_file_path)
             priorities = _apply_new_files_only_priorities(qb, new_qb_hash, diff)
             if priorities is None:
                 # Пропускать нечего. Причин ровно две, и путать их нельзя:
@@ -169,7 +223,8 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
                     "no comparison" if comparison_failed else "no common files",
                     new_qb_hash,
                 )
-                qb.recheck_torrent(new_qb_hash)
+                if not remove_old_files:
+                    qb.recheck_torrent(new_qb_hash)
         elif tracked.recheck_after_add:
             qb.recheck_torrent(new_qb_hash)
         if tracked.start_after_recheck:
@@ -184,7 +239,10 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
         tracked.status = TorrentStatus.updated.value
         tracked.last_update_at = datetime.now(timezone.utc)
         messages.clear_error(tracked)
-        if comparison_failed:
+        if remove_old_files:
+            code = "msg.update_applied.replaced"
+            params = {"removed": removed_files, "new": len(diff.get("new", []))}
+        elif comparison_failed:
             code, params = "msg.update_applied.no_comparison", {}
         elif nothing_in_common:
             code = "msg.update_applied.nothing_in_common"
@@ -195,6 +253,18 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
         else:
             code, params = "msg.update_applied.full", {}
         _event(db, tracked_id, EventType.update_applied, code, old_hash, version.info_hash, **params)
+
+        # Частичное обновление: выбывшие файлы удалить нечем — qBittorrent умеет
+        # только «всё сразу», а часть файлов нужна новой версии. Сообщаем, чтобы
+        # человек хотя бы знал, что осталось лежать.
+        left_behind = [] if remove_old_files else diff.get("removed", [])
+        if left_behind:
+            _event(
+                db, tracked_id, EventType.manual_action, "msg.files_left_behind",
+                old_hash, version.info_hash,
+                count=len(left_behind),
+                names=_sample_names(left_behind),
+            )
         db.commit()
         db.refresh(tracked)
         return tracked
@@ -208,7 +278,8 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
 
 
 def rollback_to_version(db: Session, tracked_id: int, version_id: int) -> TrackedTorrent:
-    tracked = apply_update(db, tracked_id, version_id)
+    # Откат не удаляет файлы никогда: выбывшие — как раз те, ради которых он и делается.
+    tracked = apply_update(db, tracked_id, version_id, allow_file_removal=False)
     db.add(messages.event(tracked_id, EventType.manual_action.value, "msg.rollback", new_hash=tracked.current_info_hash))
     db.commit()
     return tracked

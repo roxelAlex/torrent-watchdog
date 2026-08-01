@@ -57,6 +57,9 @@ class TrackedTorrent(Base):
     recheck_after_add: Mapped[bool] = mapped_column(Boolean, default=True)
     start_after_recheck: Mapped[bool] = mapped_column(Boolean, default=True)
     add_paused: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Удалять файлы прошлой версии, когда раздачу пересобрали целиком и ни один
+    # файл не совпал. Единственный случай, где сервис вообще трогает данные.
+    delete_replaced_files: Mapped[bool] = mapped_column(Boolean, default=False)
     update_mode: Mapped[str] = mapped_column(String(32), default="new_files_only")
     status: Mapped[str] = mapped_column(String(32), default=TorrentStatus.active.value)
     last_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

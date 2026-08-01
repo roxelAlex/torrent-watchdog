@@ -14,6 +14,7 @@ class TorrentCreate(BaseModel):
     recheck_after_add: bool = True
     start_after_recheck: bool = True
     add_paused: bool = True
+    delete_replaced_files: bool = False
     update_mode: str = "new_files_only"
 
 

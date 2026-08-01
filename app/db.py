@@ -119,6 +119,9 @@ def _migrate_sqlite() -> None:
     if "update_mode" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE tracked_torrents ADD COLUMN update_mode VARCHAR(32) DEFAULT 'new_files_only'"))
+    if "delete_replaced_files" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE tracked_torrents ADD COLUMN delete_replaced_files BOOLEAN DEFAULT 0"))
 
     for column, ddl in (
         ("last_error_code", "ALTER TABLE tracked_torrents ADD COLUMN last_error_code VARCHAR(64)"),

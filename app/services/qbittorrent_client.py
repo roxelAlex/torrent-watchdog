@@ -112,7 +112,9 @@ class QBittorrentClient:
         logger.info("qbittorrent host=%s action=resume endpoint=%s hash=%s result=ok", mask_url(self.base_url), endpoint, torrent_hash)
 
     def delete_torrent(self, torrent_hash: str, delete_files: bool = False) -> None:
-        # Safety invariant: default and all callers keep deleteFiles=false so payload data is never removed.
+        # Удаление данных возможно ровно из одного места: apply_update, когда раздачу
+        # пересобрали целиком и ни один файл не совпал (may_remove_replaced_files).
+        # Все остальные вызовы обязаны передавать delete_files=False.
         self._post(
             "/api/v2/torrents/delete",
             data={"hashes": torrent_hash, "deleteFiles": "true" if delete_files else "false"},

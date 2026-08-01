@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "torrent-watchdog"
-    app_version: str = "0.7.7"
+    app_version: str = "0.8.0"
     app_host: str = "0.0.0.0"
     app_port: int = 8096
     tz: str = "UTC"
@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     default_recheck_after_add: bool = True
     default_start_after_recheck: bool = True
     default_add_paused: bool = True
+    # По умолчанию выключено: чужая установка после обновления образа не должна
+    # внезапно начать удалять данные.
+    default_delete_replaced_files: bool = False
 
     app_auth_enabled: bool = True
     app_auth_username: str = "admin"

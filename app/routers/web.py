@@ -411,6 +411,15 @@ def toggle_auto(tracked_id: int, db: Session = Depends(get_db)):
     return _redirect(f"/torrents/{tracked_id}")
 
 
+@router.post("/torrents/{tracked_id}/toggle-delete-replaced")
+def toggle_delete_replaced(tracked_id: int, db: Session = Depends(get_db)):
+    tracked = db.get(TrackedTorrent, tracked_id)
+    if tracked:
+        tracked.delete_replaced_files = not tracked.delete_replaced_files
+        db.commit()
+    return _redirect(f"/torrents/{tracked_id}")
+
+
 @router.post("/torrents/{tracked_id}/category")
 def change_category(
     request: Request,

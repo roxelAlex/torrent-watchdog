@@ -26,6 +26,7 @@
     <div><span>{{ t("detail.category") }}</span><strong>{{ torrent.category or t("category.unset") }}</strong></div>
     <div><span>{{ t("detail.update_mode") }}</span><strong>{{ update_mode_label(torrent.update_mode) }}</strong></div>
     <div><span>{{ t("detail.auto_update") }}</span><strong>{{ t("detail.auto_on") if torrent.auto_update else t("detail.auto_off") }}</strong></div>
+    <div><span>{{ t("detail.delete_replaced") }}</span><strong>{{ t("detail.delete_replaced_on") if torrent.delete_replaced_files else t("detail.delete_replaced_off") }}</strong></div>
   </div>
   <details class="technical">
     <summary>{{ t("detail.technical") }}</summary>
@@ -61,6 +62,10 @@
     <form method="post" action="/torrents/{{ torrent.id }}/check"><button class="primary">{{ t("detail.check_now") }}</button></form>
     <form method="post" action="/torrents/{{ torrent.id }}/toggle-auto-update">
       <button>{{ t("detail.auto_disable") if torrent.auto_update else t("detail.auto_enable") }}</button>
+    </form>
+    <form method="post" action="/torrents/{{ torrent.id }}/toggle-delete-replaced"
+          {% if not torrent.delete_replaced_files %}data-confirm="{{ t('detail.delete_replaced_confirm') }}"{% endif %}>
+      <button>{{ t("detail.delete_replaced_disable") if torrent.delete_replaced_files else t("detail.delete_replaced_enable") }}</button>
     </form>
     {% if torrent.status == "disabled" %}
     <form method="post" action="/torrents/{{ torrent.id }}/enable"><button>{{ t("detail.resume_tracking") }}</button></form>
