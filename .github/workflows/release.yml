@@ -39,6 +39,25 @@ jobs:
           fi
           echo "оба секрета непустые"
 
+  # Заметки берутся из CHANGELOG, а не пишутся заново: два места с одним
+  # текстом однажды разойдутся.
+  notes:
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Релиз с заметками из CHANGELOG
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          python scripts/release_notes.py "$version" > /tmp/notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" \
+            --notes-file /tmp/notes.md --repo "$GITHUB_REPOSITORY" \
+            || gh release edit "$GITHUB_REF_NAME" --notes-file /tmp/notes.md --repo "$GITHUB_REPOSITORY"
+
   publish:
     needs: checks
     runs-on: ubuntu-latest

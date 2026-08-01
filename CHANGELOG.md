@@ -1,261 +1,259 @@
 # Changelog
 
+Русская версия — [CHANGELOG.ru.md](CHANGELOG.ru.md).
+
+## 0.8.5
+
+- Release notes are generated from `CHANGELOG.md` by `scripts/release_notes.py`, so a tag no longer arrives with an empty description. All six existing releases were backfilled.
+- Documentation is bilingual: `README.en.md` alongside the Russian README, `CHANGELOG.md` in English with `CHANGELOG.ru.md` keeping the Russian original. The GitHub and Docker Hub descriptions are in English.
+
 ## 0.8.4
 
-- Версия читается из файла `VERSION` в образе, а не из `APP_VERSION` в `.env`. Настройку копируют один раз и больше не трогают, поэтому после обновления контейнера подвал страницы и `/health` показывали бы старый номер при новом коде. Переменной окружения версию теперь не подменить — это свойство, а не поле настроек.
-
+- The version is read from the `VERSION` file inside the image instead of `APP_VERSION` in `.env`. That file is copied once and never touched again, so after updating the container the page footer and `/health` would have kept showing the old number next to new code. The version is now a property rather than a settings field, so an environment variable cannot override it.
 
 ## 0.8.3
 
-- Публикация образов больше не срывается из-за косметики: обновление описания на Docker Hub помечено необязательным, а падение одного образа не отменяет сборку второго.
+- Publishing images no longer fails over cosmetics: the Docker Hub description step is marked optional, and one image failing no longer cancels the other.
 
 ## 0.8.2
 
-- Схему базы ведёт Alembic вместо `create_all` и семи ручных `ALTER TABLE`. Базовая ревизия работает и с пустой базой, и с той, что живёт с мая: существующее пропускает, недостающее досоздаёт. Проверено на копии рабочей базы — 2 раздачи, 6 версий и 241 событие остались на месте.
-- Тест не даёт миграциям разойтись с моделями: поднимает пустую базу, прогоняет `upgrade head` и сверяет таблицы, колонки и индексы с `app/models.py`. Расхождение иначе всплыло бы только у того, кто ставит сервис с нуля.
-- Описание и теги на GitHub, описание на Docker Hub обновляется вместе с публикацией образов — теми же секретами, отдельным коротким файлом, потому что README не влезает в лимит.
-
+- Alembic now owns the database schema, replacing `create_all` and seven hand-written `ALTER TABLE` statements. The baseline revision handles both an empty database and one that has been running since May: it skips what exists and creates what is missing. Verified on a copy of the live database — 2 torrents, 6 versions and 241 events survived intact.
+- A test keeps migrations from drifting away from the models: it creates an empty database, runs `upgrade head` and compares tables, columns and indexes against `app/models.py`. Drift would otherwise only surface for someone installing from scratch.
+- Description and topics on GitHub; the Docker Hub description is updated alongside image publishing, using the same secrets and a separate short file because the README exceeds the length limit.
 
 ## 0.8.1
 
-- Исправлено: при включённом входе не открывалась ни одна страница — все отдавали 500. `SessionMiddleware` регистрировался раньше проверки входа, а Starlette делает внешним слоем добавленный последним, поэтому проверка обращалась к `request.session` до того, как та появлялась. Ошибка была не видна при `APP_AUTH_ENABLED=false`, а в `.env.example` вход включён, то есть любая новая установка не работала вовсе.
-- Порядок закреплён тестами: и сам порядок слоёв, и то, что страница уводит на вход, а API отвечает 401 вместо падения.
-- Тексты про авторизацию переведены — раньше они были русскими мимо каталога.
-- Ссылки в README ведут на ветку `main`, а не на несуществующую `master`.
-
+- Fixed: with authentication enabled not a single page opened — every one returned 500. `SessionMiddleware` was registered before the auth check, and Starlette makes the last-registered middleware the outermost layer, so the check reached for `request.session` before it existed. The bug stayed invisible under `APP_AUTH_ENABLED=false`, while `.env.example` ships with authentication on — meaning every fresh install was broken.
+- The ordering is now locked down by tests: the layer order itself, plus that a page redirects to the login form and the API answers 401 instead of crashing.
+- Authentication texts are translated — they used to be Russian regardless of the interface language.
+- README links point at the `main` branch instead of a `master` that does not exist.
 
 ## 0.8.0
 
-- Появился признак `Удалять файлы при полной пересборке`. Когда релизёр перевыпускает раздачу целиком и ни один файл не совпадает, файлы прошлой версии больше не остаются на диске мусором — они удаляются через qBittorrent. До этого сервис не удалял файлы никогда, и после такой пересборки оставались гигабайты ненужного.
-- Условий пять, и проверяются они вместе: признак включён, это не откат, состав удалось сравнить, совпадений ноль, прежний торрент существует. Любое несошедшееся означает «не трогать». Решение вынесено в отдельную функцию и закрыто тестами на каждую ветку.
-- Порядок операций изменён: сначала добавляется новый торрент и проверяется его регистрация, и только потом удаляется старый с файлами. Прежний порядок при сбое добавления оставил бы без данных и без замены.
-- Откат не удаляет файлы никогда — при нём выбывшие файлы как раз те, ради которых он и делается.
-- Частичное обновление файлы не трогает: удалить выбывшие нечем, qBittorrent умеет только «все файлы торрента сразу». Такие файлы теперь перечисляются в журнале, чтобы о них хотя бы было известно.
-- Глобальный дефолт — выключено: обновление образа не должно менять поведение чужих установок.
-
+- New per-torrent switch `Delete files on a full repack`. When a releaser reissues a torrent from scratch and not a single file matches, the previous version's files no longer linger on disk as garbage — they are deleted through qBittorrent. Until now the service never deleted files, and such a repack left gigabytes of dead weight behind.
+- Five conditions are checked together: the switch is on, this is not a rollback, the file list could be compared, there are zero matches, and a previous torrent exists. Any one of them failing means "do not touch". The decision lives in a dedicated function with a test for every branch.
+- The order of operations changed: the new torrent is added and its registration confirmed first, and only then is the old one deleted with its files. The previous order would have left you without data and without a replacement if adding failed.
+- A rollback never deletes files — there the dropped files are precisely the ones it exists to bring back.
+- Partial updates leave files alone: there is nothing to delete them with, since qBittorrent only knows "all files of a torrent at once". Such files are now listed in the journal so at least you know about them.
+- The global default is off: updating the image must not change behaviour on other people's installations.
 
 ## 0.7.7
 
-- Исправлено сообщение при пересобранной раздаче. Если релизёр заменил рип целиком и ни один файл не совпал, сервис писал «сравнить состав файлов не удалось: её сохранённый .torrent недоступен» — хотя файл был на месте и сравнение прошло, просто общих файлов не оказалось. Случай из жизни: у «Yani Neko» три рипа AMZN заменили пятью NF.
-- Теперь эти два исхода разведены: «сравнить не с чем» и «сравнили, совпадений нет». Второй сообщает, сколько файлов ушло из раздачи и сколько придётся скачать.
-- Та же правка в сводке перед применением: она больше не обещает, что имеющиеся файлы не будут перекачаны, когда совпадений ноль.
-
+- Fixed the message shown for a repacked torrent. When a releaser replaced the rip entirely and not a single file matched, the service claimed "the file list could not be compared: its saved .torrent is missing" — even though the file was there and the comparison had succeeded, there simply were no files in common. A real case: three AMZN rips of "Yani Neko" were replaced by five NF ones.
+- The two outcomes are now separated: "nothing to compare against" and "compared, nothing matches". The second reports how many files left the torrent and how many will be downloaded.
+- The same fix in the pre-apply summary: it no longer promises that existing files will be skipped when there are zero matches.
 
 ## 0.7.6
 
-- Проект готов к публикации: лицензия MIT, образы `roxelalex/torrent-watchdog` и `roxelalex/torrent-watchdog-flaresolverr` под `linux/amd64` и `linux/arm64`.
-- `docker-compose.yml` тянет опубликованные образы, а сборка из исходников вынесена в `docker-compose.override.yml` — Compose подхватывает его сам, так что в клоне команда прежняя, а тому, кто скачал только compose, ничего собирать не нужно.
-- GitHub Actions: тесты на каждый push и публикация по тегу версии. Перед сборкой тег сверяется с файлом `VERSION`, иначе образ уехал бы под чужим номером.
-- Дефолты больше не описывают чью-то домашнюю сеть: `TZ=UTC` вместо `Asia/Yekaterinburg`, нейтральный адрес qBittorrent.
-- В образы добавлены метки происхождения, а в `Dockerfile.flaresolverr` — указание, что это расширение официального FlareSolverr под MIT.
-
+- Ready to publish: MIT licence, images `roxelalex/torrent-watchdog` and `roxelalex/torrent-watchdog-flaresolverr` for `linux/amd64` and `linux/arm64`.
+- `docker-compose.yml` pulls the published images, while building from source moved to `docker-compose.override.yml` — Compose picks it up automatically, so the command stays the same in a clone while anyone who downloaded only the compose file has nothing to build.
+- GitHub Actions: tests on every push, publishing on a version tag. The tag is checked against the `VERSION` file first, otherwise an image would ship under the wrong number.
+- Defaults no longer describe somebody's home network: `TZ=UTC` instead of `Asia/Yekaterinburg`, a neutral qBittorrent address.
+- Provenance labels added to the images, and `Dockerfile.flaresolverr` now states that it extends the official MIT-licensed FlareSolverr.
 
 ## 0.7.5
 
-- Исправлено: на странице добавления не работал ни выбор своей категории, ни подсказки путей, ни подтверждения. Скрипт обращался к `const` до его объявления и падал целиком при загрузке — а поскольку проверка стояла за `qbClientSelect &&`, на странице раздачи, где этого элемента нет, всё продолжало работать, и поломка была видна только в одном месте.
-- Все элементы теперь ищутся в начале файла, до функций и привязок.
-- Добавлена проверка скрипта на загрузку: `node --check` ловит только синтаксис, а такая ошибка проходит мимо него.
-
+- Fixed: on the add page neither the custom category, nor the path suggestions, nor the delete confirmations worked. The script reached a `const` before its declaration and died entirely at load — and because the guard read `qbClientSelect &&`, everything kept working on the torrent page where that element is absent, so the breakage showed up in exactly one place.
+- All elements are now looked up at the top of the file, before functions and bindings.
+- Added a load-time check for the script: `node --check` only catches syntax and lets this class of error through.
 
 ## 0.7.4
 
-- Исправлен показ папки для категорий без собственного пути. qBittorrent кладёт такие раздачи в подпапку с именем категории внутри пути по умолчанию — `lidarr` без пути даёт `/downloads/lidarr`, проверено на живых клиентах. Сервис же показывал просто `/downloads` и приписку «путь не задан», то есть врал в обе стороны. Правило теперь живёт в одном месте на сервере, а шаблоны и скрипт берут посчитанный путь.
-- Такие категории вернулись и в подсказки для поля папки: раньше они молча выпадали, хотя папка у них есть.
-- Своей категории можно сразу задать путь. Пустое поле означает «пусть решает qBittorrent» — это и есть подпапка с именем категории.
-
+- Fixed the folder shown for categories without a path of their own. qBittorrent puts such torrents into a subfolder named after the category inside the default path — `lidarr` without a path means `/downloads/lidarr`, verified against live clients. The service showed plain `/downloads` plus a note saying "no path set", which was wrong in both directions. The rule now lives in one place on the server, and templates and script use the computed path.
+- Such categories are back in the download-folder suggestions: they used to drop out silently even though they do have a folder.
+- A custom category can be given a path right away. An empty field means "let qBittorrent decide" — which is that same named subfolder.
 
 ## 0.7.3
 
-- Категория выбирается обычным списком со всеми категориями клиента и их путями. Раньше это было поле с автодополнением, а браузер фильтрует подсказки по уже введённому тексту: на странице раздачи поле заранее заполнено, поэтому в списке всегда оставалась ровно одна строка — текущая.
-- Пункт «своя категория» открывает поле для нового названия. Категория при этом действительно создаётся в qBittorrent: `setCategory` на несуществующей отвечает `409`, и без создания пункт работал бы только на вид.
-- Категория раздачи, исчезнувшая из клиента, не теряется молча — она остаётся в списке с пометкой «нет в клиенте».
-- У папки загрузки появились подсказки: путь клиента по умолчанию и пути категорий. Ничего не выдумывается, всё из API qBittorrent.
-- Список категорий и подсказки путей перестраиваются при смене клиента.
-
+- The category is picked from an ordinary dropdown listing every category of the client along with its path. It used to be an autocomplete field, and the browser filters suggestions by whatever is already typed: on the torrent page the field is pre-filled, so the list always held exactly one row — the current one.
+- The "custom category" entry opens a field for a new name. The category is genuinely created in qBittorrent: `setCategory` answers `409` for a category that does not exist, so without creating it the entry would only have worked in appearance.
+- A category that disappeared from the client is not lost silently — it stays in the list marked "not in the client".
+- The download folder gained suggestions: the client's default path and the category paths. Nothing is invented, everything comes from the qBittorrent API.
+- The category list and the path suggestions are rebuilt when the client changes.
 
 ## 0.7.2
 
-- Путь по умолчанию берётся у самого qBittorrent (`GET /api/v2/app/preferences`), а не описывается словами: в форме теперь `по умолчанию у клиента: /downloads`.
-- Под полем смены категории сказано, что станет с файлами. Клиент сообщает это настройкой `torrent_changed_tmm_enabled`; у обоих текущих клиентов она включена, поэтому смена категории раздачу переносит.
+- The default path is taken from qBittorrent itself (`GET /api/v2/app/preferences`) instead of being described in words: the form now says `the client default: /downloads`.
+- The category field states what will happen to the files. The client reports this through `torrent_changed_tmm_enabled`; both current clients have it enabled, so changing a category relocates the torrent.
 
 ## 0.7.1
 
-- Папка загрузки и категория больше не выглядят независимыми. У категории qBittorrent обычно есть свой путь, и пустое поле папки означает «положить туда же», а заполненное — перебивает его. Форма теперь это показывает: категория идёт первой, а плейсхолдер папки подставляет путь выбранной категории.
-- В карточке раздачи показан итоговый путь и его происхождение. Раньше там стоял прочерк, хотя файлы лежали в папке категории: у обеих текущих раздач `save_path` пуст, а в qBittorrent они в `/music` и `/series`.
+- The download folder and the category no longer look independent. A qBittorrent category usually has its own path, an empty folder field means "put it there too", and a filled one overrides it — which is exactly what qBittorrent does when given both `savepath` and `category`. The form now shows this: the category comes first, and the folder placeholder fills in the selected category's path.
+- The torrent page shows the resulting path and where it comes from. It used to show a dash even though the files sat in the category folder: both current torrents have an empty `save_path` while qBittorrent keeps them in `/music` and `/series`.
 
 ## 0.7.0
 
-- Уведомления в Telegram с разметкой: значок по типу события, жирная строка события, название раздачи курсивом и текст ниже. По значку в списке чатов видно, что случилось, не открывая сообщение. Всё подставляемое экранируется — иначе угловая скобка в названии раздачи не даёт Telegram доставить сообщение.
-- Бот пишет о найденном обновлении, применённом обновлении и об ошибках. Набор событий выбирается галочками, рутинные проверки без изменений по умолчанию выключены.
-- Язык уведомлений задаётся отдельно от языка интерфейса: у планировщика нет ни запроса, ни cookie, а читать сообщения может другой человек.
-- Отправка идёт в отдельном потоке и никогда не роняет проверку: молчащий Telegram — не повод считать раздачу непроверенной, причина уходит в лог.
-- Кнопка «Отправить тестовое» на странице настроек проверяет токен и ID чата сразу.
-- Токен, как и пароли, не показывается в форме; пустое поле означает «не менять».
-- У формы уведомлений свой роут: общий затирал бы поля соседней формы пустыми значениями.
+- Telegram notifications with formatting: an icon per event type, the event in bold, the torrent title in italics and the text below. The icon makes the chat list readable without opening the message. Everything interpolated is escaped — otherwise an angle bracket in a torrent title stops Telegram from delivering the message at all.
+- The bot reports found updates, applied updates and errors. The set of events is chosen with checkboxes; routine no-change checks are off by default.
+- The notification language is configured separately from the interface language: the scheduler has neither a request nor a cookie, and a different person may be reading the messages.
+- Sending happens in a separate thread and never brings a check down: a silent Telegram is no reason to consider a torrent unchecked, the reason goes to the log.
+- A "Send a test" button on the settings page checks the token and chat ID right away.
+- The token, like the passwords, is not shown in the form; an empty field means "keep it".
+- The notification form has its own route: the shared one would have wiped the neighbouring form's fields with empty values.
 
 ## 0.6.0
 
-- Интерфейс на двух языках: русском и английском. В шапке выпадающее меню с флагом и кодом языка, выбор запоминается в cookie на год; язык по умолчанию задаётся `APP_LANGUAGE`.
-- Журнал и ошибки раздач тоже переводятся. В базу пишется код события и параметры, а текст собирается при показе — событие живёт годами, а язык читателя может смениться завтра.
-- Записи, сделанные до переводов, разобраны обратно на коды по известным формулировкам: из 255 опознано 254, оставшаяся легаси-запись показывается как записана.
-- Даты в английской версии в формате ISO, в русской — привычные `дд.мм.гггг`.
-- Тексты ошибок бросаются кодом и параметрами и переводятся в роутере: раньше они были русскими независимо от языка страницы.
-- Подсказки, которые рисует JavaScript, тоже переводятся: тексты приходят из шаблона в data-атрибутах, а не зашиты в скрипт.
-- Новый язык добавляется одним файлом в `app/locales` — каталог сканируется сам, регистрировать ничего не нужно. Недостающие ключи падают на русский, а не ломают страницу.
-- Тест не даёт каталогам разойтись: проверяет отсутствие пропущенных и лишних ключей, совпадение параметров в строках и то, что все ключи из шаблонов существуют.
+- The interface speaks two languages, Russian and English. A dropdown in the header shows the flag and code; the choice is remembered in a cookie for a year, and the default language is set by `APP_LANGUAGE`.
+- The journal and torrent errors are translated too. The database stores an event code and its parameters, and the text is assembled at display time — an event lives for years while the reader's language may change tomorrow.
+- Entries written before translations existed were parsed back into codes by their known wording: 254 of 255 recognised, the remaining legacy entry is shown exactly as it was recorded.
+- Dates use ISO format in the English version and the familiar `dd.mm.yyyy` in Russian.
+- Error texts are raised as a code plus parameters and translated in the router: they used to be Russian regardless of the page language.
+- Hints drawn by JavaScript are translated as well: the texts arrive from the template in data attributes rather than being hard-coded in the script.
+- A new language is added with a single file in `app/locales` — the directory is scanned automatically, nothing needs registering. Missing keys fall back to Russian instead of breaking the page.
+- A test keeps the catalogues from drifting: it checks for missing and extra keys, matching placeholders inside strings, and that every key used in templates exists.
 
 ## 0.5.0
 
-- Вход на RuTracker логином и паролем вместо ручной вставки cookie. Сервис входит сам и обновляет cookie, когда сессия истекает: если вместо `.torrent` приходит страница, он логинится прямо между попытками скачивания и повторяет запрос.
-- Вход выполняется браузером внутри собственного образа FlareSolverr — новый endpoint `POST /login`. Перед формой стоит Cloudflare, а значение кнопки «вход» трекер ждёт в cp1251; настоящая отправка формы решает и то, и другое.
-- Кнопка `Проверить вход` на странице настроек: результат виден сразу, а не после ночной проверки.
-- Капчу автоматизировать нельзя, и сервис говорит об этом прямо, а не падает с невнятной ошибкой. Поле cookie осталось как аварийный путь и переехало в блок `Cookie вручную`; туда же складывается cookie, полученный автоматическим входом.
-- Повторный вход не чаще раза в 5 минут, чтобы при неверном пароле не долбить трекер. Параллельные проверки не логинятся каждая: одна входит, остальные подхватывают её результат.
-- Пароль не показывается в форме и не уходит в шаблон; пустое поле означает «не менять».
-- Транспорт до FlareSolverr вынесен в отдельный модуль: через него ходят и скачивание, и вход.
+- Signing in to RuTracker with a username and password instead of pasting cookies by hand. The service signs in on its own and refreshes the cookie when the session expires: if a page arrives instead of a `.torrent`, it logs in between download attempts and retries.
+- Signing in is performed by the browser inside our own FlareSolverr image — a new `POST /login` endpoint. Cloudflare guards the form, and the tracker expects the submit button's value in cp1251; a genuine form submission solves both.
+- A "Test sign-in" button on the settings page: the result is visible immediately instead of after the nightly check.
+- A captcha cannot be automated, and the service says so plainly instead of failing with a vague error. The cookie field remains as an escape hatch and moved into a "Cookie by hand" block; the cookie obtained by automatic sign-in lands there too.
+- Repeated sign-ins happen at most once every 5 minutes so a wrong password does not hammer the tracker. Parallel checks do not each sign in: one does, the rest pick up its result.
+- The password is not shown in the form and never reaches the template; an empty field means "keep it".
+- The FlareSolverr transport moved into its own module: both downloading and signing in go through it.
 
 ## 0.4.0
 
-Клиенты qBittorrent:
+qBittorrent clients:
 
-- Убрано понятие «основной клиент»: значок, кнопка «Сделать основным», флаг при добавлении и колонка `is_default` в базе. Раздача и так привязывается к конкретному клиенту при добавлении, а отдельный признак только дублировал этот выбор и молча решал за пользователя.
-- Клиенты в списке идут по алфавиту. Первый подставляется в форму добавления и служит запасным для раздач без привязки.
+- The notion of a "default client" is gone: the badge, the "Make default" button, the flag on the add form and the `is_default` column in the database. A torrent is already bound to a specific client when added, and a separate marker merely duplicated that choice while quietly deciding on the user's behalf.
+- Clients are listed alphabetically. The first one is pre-selected in the add form and serves as the fallback for torrents without a binding.
 
-Источник:
+Source:
 
-- Под наблюдение принимаются только ссылки на темы RuTracker. Magnet и прямые ссылки на `.torrent` отклоняются формой и API с подсказкой. Тема — постоянный адрес, с которого каждый раз скачивается свежий `.torrent`; у magnet файла раздачи нет вовсе, а его `info_hash` неизменен, поэтому обновление по нему не обнаружить в принципе.
+- Only RuTracker topic links are accepted. Magnet links and direct `.torrent` links are rejected by the form and the API with an explanation. A topic is a stable address that yields a fresh `.torrent` every time; a magnet has no torrent file at all and its `info_hash` never changes, so an update cannot be detected through it even in principle.
 
-Интерфейс:
+Interface:
 
-- Интерфейс перерисован: цвет теперь появляется только там, где нужно решение человека. Рельсы и маячки убраны со спокойных строк.
-- В реестре появилась полоска вахты — последние 14 исходов проверки, высота штриха кодирует серьёзность. Сразу показала прошлую серию сбоев, которой не было видно нигде.
-- Вместо плиток-счётчиков строка состояния службы: что требует внимания, когда была и будет проверка, сколько клиентов на связи. Время следующей проверки берётся из живого job планировщика.
-- Из настроек убраны поля часа и минуты: форма писала их в базу, а планировщик читал только `.env`. Расписание показано как факт.
+- The interface was redrawn: colour now appears only where a human decision is needed. Rails and beacons were removed from calm rows.
+- The registry gained a watch strip — the last 14 check outcomes, with stroke height encoding severity. It immediately revealed a past run of failures that had been visible nowhere.
+- Counter tiles were replaced by a service status line: what needs attention, when the last and next checks are, how many clients are reachable. The next check time comes from the live scheduler job.
+- Hour and minute fields were removed from the settings: the form wrote them to the database while the scheduler read only `.env`. The schedule is now shown as a fact.
 
-Тексты приведены в соответствие с поведением:
+Texts brought in line with behaviour:
 
-- Итог по найденной версии больше не обещает «уже имеющиеся файлы не будут перекачиваться» в режиме полной замены.
-- Если сравнить состав файлов не с чем, отчёт об этом больше не выглядит успехом, а само обновление запускает recheck вместо повторного скачивания всей раздачи.
-- В форме добавления сказано, что magnet-ссылки добавляются, но обновления по ним не отслеживаются.
-- Кнопка «Проверить всех» проверяет всех клиентов, а не только основного, как раньше при прежнем названии «Проверить связь».
-- Сообщение об отсутствующем cookie RuTracker указывает и на страницу настроек, а не только на `.env`.
-- Раздача, застрявшая в статусе «обновляется» после перезапуска сервиса, переводится в ошибку с объяснением.
+- The summary for a found version no longer promises that "existing files will not be downloaded again" in full-replacement mode.
+- When there is nothing to compare against, the report no longer looks like a success, and the update starts a recheck instead of re-downloading the whole torrent.
+- The add form states that magnet links are added but not tracked for updates.
+- The "Check all" button checks every client rather than only the default one, as it did under its former name "Check connection".
+- The message about a missing RuTracker cookie points at the settings page too, not just at `.env`.
+- A torrent stuck in the "updating" state after a service restart is moved to an error state with an explanation.
 
-Производительность:
+Performance:
 
-- Проба qBittorrent получила отдельный короткий таймаут, один запрос вместо двух, параллельный опрос клиентов и кэш. Недоступный клиент стоил странице 30 секунд на каждый рендер.
-- SQLite переведён на WAL, включены `busy_timeout` и `foreign_keys`, добавлены составные индексы.
-- Полоска вахты строится одним запросом на весь реестр, клиент подтягивается через `joinedload`.
-- Добавление раздачи скачивает источник один раз вместо двух.
-- Проверки идут параллельно, но обращения к FlareSolverr сериализованы: два одновременных вызова Cloudflare в одном браузере падают оба.
+- The qBittorrent probe received a separate short timeout, one request instead of two, parallel polling and a cache. An unreachable client used to cost a page 30 seconds on every render.
+- SQLite switched to WAL, `busy_timeout` and `foreign_keys` enabled, composite indexes added.
+- The watch strip is built with a single query for the whole registry, and the client is loaded via `joinedload`.
+- Adding a torrent downloads the source once instead of twice.
+- Checks run in parallel, but FlareSolverr calls are serialised: two simultaneous Cloudflare challenges in one browser both fail.
 
-Исправления:
+Fixes:
 
-- `latest_pending_version` больше не может предложить к применению версию старше текущей. На живых данных функция предлагала версии от 13 июня и 19 июля вместо актуальных от 9 и 21 июля; через API это применилось бы молча.
-- После ночной проверки удаляются события старше 180 дней и `.torrent` без версии старше 30 дней.
-- Контейнер работает не от root, появились healthcheck и `.dockerignore` — в контекст сборки уезжала папка `data` с базой и cookie.
-- Добавлены тесты: `info_hash`, сравнение состава файлов, выбор ожидающей версии.
+- `latest_pending_version` can no longer offer a version older than the current one for applying. On live data it offered versions from 13 June and 19 July instead of the current ones from 9 and 21 July; through the API that would have been applied silently.
+- After the nightly check, events older than 180 days and unreferenced `.torrent` files older than 30 days are removed.
+- The container runs as a non-root user; a healthcheck and `.dockerignore` were added — the build context used to include the `data` folder with the database and cookies.
+- Tests added: `info_hash`, file list comparison, pending version selection.
 
 ## 0.3.7
 
-- На странице существующей раздачи добавлена смена категории qBittorrent.
-- Категории загружаются из qBittorrent-клиента, к которому привязана раздача.
-- Изменение категории синхронно сохраняется в qBittorrent и SQLite и записывается в историю событий.
-- Добавлен API endpoint `POST /api/torrents/{id}/category`.
+- Changing the qBittorrent category was added to the torrent page.
+- Categories are loaded from the qBittorrent client the torrent is bound to.
+- A category change is saved to qBittorrent and SQLite together and recorded in the event history.
+- New API endpoint `POST /api/torrents/{id}/category`.
 
 ## 0.3.6
 
-- Исправлено сопоставление файлов qBittorrent с файлами из `.torrent`: учитывается корневая папка раздачи в пути qBittorrent.
-- Режим `Только новые файлы` теперь корректно отключает уже существующие файлы и оставляет выбранными новые.
+- Fixed matching qBittorrent files against those from the `.torrent`: the torrent's root folder in the qBittorrent path is now taken into account.
+- The `New files only` mode now correctly deselects existing files and keeps new ones selected.
 
 ## 0.3.5
 
-- Добавлено восстановление после частично выполненного обновления.
-- Если новый torrent уже присутствует в qBittorrent, сервис переиспользует его вместо повторного добавления с ошибкой `409 Conflict`.
-- Повторное применение одной версии больше не удаляет уже добавленный целевой torrent.
+- Recovery after a partially completed update was added.
+- If the new torrent is already present in qBittorrent, the service reuses it instead of adding it again and failing with `409 Conflict`.
+- Applying the same version twice no longer deletes the target torrent that was already added.
 
 ## 0.3.4
 
-- Исправлено применение обновлений при задержке регистрации нового торрента в qBittorrent.
-- Временный ответ `404` от списка файлов теперь повторяется до 30 секунд.
-- По истечении ожидания выводится понятная ошибка вместо продолжения с неприменёнными приоритетами файлов.
+- Fixed applying updates when qBittorrent is slow to register the new torrent.
+- A transient `404` from the file list is now retried for up to 30 seconds.
+- Once the wait runs out, a clear error is reported instead of continuing with file priorities left unapplied.
 
 ## 0.3.3
 
-- Добавлен статус `updated`: после применения обновления маячок становится фиолетовым без пульсации.
-- Статус `updated` держится до следующей проверки; если изменений больше нет, раздача возвращается в `active`.
+- New `updated` status: after an update is applied the beacon turns violet without pulsing.
+- The `updated` status holds until the next check; if nothing changed, the torrent returns to `active`.
 
 ## 0.3.2
 
-- Добавлены цветные маячки статуса раздач: обновление мигает жёлтым, ошибка красным, обновление в процессе фиолетовым.
-- Время в веб-интерфейсе теперь отображается в локальном формате `дд.мм.гггг чч:мм` с timezone `Asia/Yekaterinburg`.
-- Hash-значения убраны из обычных списков, истории версий и событий; они остаются только в свёрнутом блоке технических сведений.
+- Coloured status beacons: an available update blinks amber, an error red, an update in progress violet.
+- Times in the web interface are shown in the local `dd.mm.yyyy hh:mm` format with the `Asia/Yekaterinburg` timezone.
+- Hash values were removed from ordinary lists, version history and events; they remain only in the collapsed technical details block.
 
 ## 0.3.1
 
-- На странице добавления категории qBittorrent теперь динамически подгружаются из выбранного клиента.
+- On the add page, qBittorrent categories are now loaded dynamically from the selected client.
 
 ## 0.3.0
 
-- Добавлен режим обновления `Только новые файлы`.
-- Сервис сравнивает списки файлов старого и нового `.torrent`.
-- При применении обновления старые файлы помечаются в qBittorrent как `не скачивать`, новые остаются выбранными.
-- Для режима `Только новые файлы` recheck не запускается, чтобы qBittorrent не перекачивал локально изменённые файлы с тегами.
-- В Dockerfile явно задан `TZ=Asia/Yekaterinburg`.
+- New `New files only` update mode.
+- The service compares the file lists of the old and the new `.torrent`.
+- When an update is applied, old files are marked `do not download` in qBittorrent while new ones stay selected.
+- In `New files only` mode no recheck is started, so qBittorrent does not re-download locally modified files carrying tags.
+- `TZ=Asia/Yekaterinburg` is set explicitly in the Dockerfile.
 
 ## 0.2.1
 
-- Добавлена совместимость с qBittorrent 5.2: успешный login может возвращать `204 No Content` и session cookie вместо текста `Ok.`.
+- Compatibility with qBittorrent 5.2: a successful login may return `204 No Content` and a session cookie instead of the text `Ok.`.
 
 ## 0.2.0
 
-- Добавлена поддержка нескольких qBittorrent-клиентов.
-- Существующие раздачи автоматически привязываются к клиенту `Основной`, созданному из текущих `.env` настроек.
-- В форме добавления появился выбор qBittorrent-клиента.
-- На странице настроек появился список клиентов, проверка состояния и добавление нового клиента.
-- Интерфейс упрощён: меньше технических полей на главной и в карточке раздачи, технические детали скрыты в отдельный блок.
+- Support for multiple qBittorrent clients.
+- Existing torrents are bound automatically to the `Основной` client created from the current `.env` settings.
+- The add form gained a qBittorrent client selector.
+- The settings page gained a client list, a connection check and a form for adding a new client.
+- The interface was simplified: fewer technical fields on the main page and the torrent page, technical details hidden in a separate block.
 
 ## 0.1.6
 
-- Ограничены повторы RuTracker в рамках одной проверки, чтобы scheduler и ручные проверки не зависали навсегда при DNS/сетевых ошибках.
-- Значения по умолчанию изменены на `RUTRACKER_MAX_ATTEMPTS=3` и `RUTRACKER_RETRY_DELAY_SECONDS=10`.
+- RuTracker retries within a single check are now bounded, so the scheduler and manual checks no longer hang forever on DNS or network errors.
+- Defaults changed to `RUTRACKER_MAX_ATTEMPTS=3` and `RUTRACKER_RETRY_DELAY_SECONDS=10`.
 
 ## 0.1.5
 
-- Обновлён дизайн веб-интерфейса: более информативная главная панель, улучшенные статусы и карточки.
-- Добавлены русские подписи статусов и событий.
-- Улучшена визуальная читаемость таблиц, деталей раздачи и мобильных карточек.
+- Refreshed web interface design: a more informative main panel, improved statuses and cards.
+- Russian labels for statuses and events.
+- Better visual readability of tables, torrent details and mobile cards.
 
 ## 0.1.4
 
-- Добавлена совместимость с qBittorrent 5.x: fallback с `pause/resume` на `stop/start`.
-- При частичной ошибке после добавления торрента сервис сохраняет полученный qBittorrent hash.
+- Compatibility with qBittorrent 5.x: fallback from `pause/resume` to `stop/start`.
+- On a partial failure after adding a torrent, the service keeps the qBittorrent hash it received.
 
 ## 0.1.3
 
-- RuTracker resolver теперь использует cookie, сохранённые на странице настроек, с fallback на `.env`.
-- Добавлена проверка, что cookie содержит авторизационные параметры RuTracker, а не только `cf_clearance`.
+- The RuTracker resolver now uses cookies saved on the settings page, falling back to `.env`.
+- Added a check that the cookie carries RuTracker authorisation parameters and not just `cf_clearance`.
 
 ## 0.1.2
 
-- RuTracker resolver теперь повторяет скачивание `.torrent` до успешного ответа.
-- Добавлены настройки `RUTRACKER_RETRY_DELAY_SECONDS` и `RUTRACKER_MAX_ATTEMPTS`.
-- Конфигурационные ошибки RuTracker, например пустой cookie, по-прежнему возвращаются сразу.
+- The RuTracker resolver now retries downloading the `.torrent` until it succeeds.
+- New settings `RUTRACKER_RETRY_DELAY_SECONDS` and `RUTRACKER_MAX_ATTEMPTS`.
+- RuTracker configuration errors, such as an empty cookie, are still returned immediately.
 
 ## 0.1.1
 
-- Добавлена загрузка категорий из подключенного qBittorrent.
-- Добавлен API endpoint `/api/qbittorrent/categories`.
-- Форма добавления раздачи теперь показывает категории qBittorrent как подсказки.
+- Categories are loaded from the connected qBittorrent.
+- New API endpoint `/api/qbittorrent/categories`.
+- The add form now shows qBittorrent categories as suggestions.
 
 ## 0.1.0
 
-- Первичная версия проекта.
-- Добавление раздач для отслеживания.
-- Проверка обновлений по info_hash.
-- Интеграция с удалённым qBittorrent Web API.
-- Безопасная замена торрента без удаления файлов.
-- RuTracker resolver для topic URL.
-- Веб-интерфейс на русском языке.
-- SQLite база данных с автоинициализацией таблиц.
-- Dockerfile и docker-compose для запуска сервиса.
+- Initial version.
+- Adding torrents for tracking.
+- Update detection by `info_hash`.
+- Integration with a remote qBittorrent Web API.
+- Safe torrent replacement without deleting files.
+- RuTracker resolver for topic URLs.
+- Web interface in Russian.
+- SQLite database with automatic table initialisation.
+- Dockerfile and docker-compose for running the service.

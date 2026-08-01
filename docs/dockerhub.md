@@ -1,10 +1,10 @@
 # torrent-watchdog
 
-Следит за обновлениями раздач RuTracker и применяет их в qBittorrent, докачивая только новые файлы.
+Watches RuTracker topics for updates and applies them in qBittorrent, downloading only the new files.
 
-Под наблюдение берётся ссылка на тему трекера. Раз в сутки сервис скачивает с неё свежий `.torrent`, сравнивает `info_hash` и, если раздача обновилась, сравнивает состав файлов. В режиме «только новые файлы» уже скачанное помечается как «не загружать», поэтому докачивается лишь добавленное — для медиатеки в сотни гигабайт это разница между минутами и сутками.
+What you put under watch is a link to a tracker topic. Once a day the service downloads a fresh `.torrent` from it, compares the `info_hash` and, when the torrent has changed, compares the file lists. In "new files only" mode whatever you already have is marked "do not download", so only the added files are fetched — for a media library of several hundred gigabytes that is the difference between minutes and a day.
 
-## Запуск
+## Running it
 
 ```bash
 curl -O https://raw.githubusercontent.com/roxelAlex/torrent-watchdog/main/docker-compose.yml
@@ -12,27 +12,27 @@ curl -o .env https://raw.githubusercontent.com/roxelAlex/torrent-watchdog/main/.
 docker compose up -d
 ```
 
-Поднимаются два контейнера: сервис и `torrent-watchdog-flaresolverr`. Второй обязателен — перед RuTracker стоит Cloudflare, и стандартный FlareSolverr не подходит: он отдаёт только HTML, а `dl.php` присылает файл.
+Two containers come up: the service and `torrent-watchdog-flaresolverr`. The second is required — Cloudflare guards RuTracker, and stock FlareSolverr will not do: it only returns HTML while `dl.php` sends a file.
 
-Интерфейс на `http://SERVER_IP:8096`, вход `admin` / `change_me` из `.env`. **Смените `APP_AUTH_PASSWORD` и `APP_SECRET_KEY`** перед постоянным использованием.
+The interface is at `http://SERVER_IP:8096`, sign in with `admin` / `change_me` from `.env`. **Change `APP_AUTH_PASSWORD` and `APP_SECRET_KEY`** before using it for real.
 
-## Что умеет
+## What it does
 
-- Вход на трекер логином и паролем: cookie обновляется сам, когда сессия истекает.
-- Несколько клиентов qBittorrent, у каждой раздачи свой.
-- Два режима обновления: докачивать только новое или заменять раздачу целиком с проверкой файлов.
-- История версий с откатом на любую сохранённую.
-- Уведомления в Telegram с выбором событий.
-- Интерфейс на русском и английском, язык уведомлений задаётся отдельно.
+- Signs in to the tracker with a username and password; the cookie is refreshed automatically when the session expires.
+- Several qBittorrent clients, each torrent bound to one of them.
+- Two update modes: download only what is new, or replace the torrent entirely and verify the files.
+- Version history with rollback to any saved version.
+- Telegram notifications with a choice of events.
+- Interface in Russian and English; the notification language is configured separately.
 
-## Файлы на диске
+## Files on disk
 
-По умолчанию сервис не удаляет их никогда. Единственное исключение включается признаком у раздачи и срабатывает, только когда релизёр пересобрал раздачу целиком и ни один файл не совпал. Откат и частичные обновления файлы не трогают.
+By default the service never deletes them. The single exception is enabled per torrent and only fires when the releaser repacked the torrent from scratch and not a single file matches. Rollbacks and partial updates leave files alone.
 
-## Архитектуры
+## Architectures
 
-`linux/amd64` и `linux/arm64` — подходит для NAS и Raspberry Pi.
+`linux/amd64` and `linux/arm64` — suitable for a NAS or a Raspberry Pi.
 
-## Исходники и документация
+## Source and documentation
 
-[github.com/roxelAlex/torrent-watchdog](https://github.com/roxelAlex/torrent-watchdog) — полное описание настроек, разбор работы с FlareSolverr и лицензия MIT.
+[github.com/roxelAlex/torrent-watchdog](https://github.com/roxelAlex/torrent-watchdog) — full settings reference, how FlareSolverr is used, and the MIT licence.
