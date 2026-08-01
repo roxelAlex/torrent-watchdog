@@ -92,6 +92,7 @@ MESSAGES = {
     "msg.update_found": "Update found. New files: {new}, already present: {existing}, removed from the torrent: {removed}.",
     "msg.update_applied.new_files_only": "Update applied in new-files-only mode: {skipped} old files disabled, {selected} selected for download. Recheck was not started.",
     "msg.update_applied.full": "Update applied. No files were deleted from disk.",
+    "msg.update_applied.nothing_in_common": "Update applied. The torrent was repacked from scratch: not a single file matches the previous version and {removed} were dropped from it. There is nothing to skip — all {new} files will be downloaded again. Old files on disk were not deleted, a recheck was started.",
     "msg.update_applied.no_comparison": "Update applied, but the file list could not be compared with the previous version: its saved .torrent is missing. File priorities were left untouched and a recheck was started instead, so qBittorrent verifies what is already downloaded. No files were deleted from disk.",
     "msg.update_failed": "Could not apply the update: {error}",
     "msg.update_interrupted": "Applying the update was interrupted by a service restart. Check the torrent in qBittorrent and try again.",
@@ -152,6 +153,7 @@ MESSAGES = {
     # New version summary
     "summary.new_files_only": "New files: {new}. Files you already have will not be downloaded again: {existing}.",
     "summary.new_files_only.no_new": "The file list changed, but no new files were found.",
+    "summary.nothing_in_common": "The torrent was repacked from scratch: nothing matches the previous version and {removed} files were dropped. All {new} files will have to be downloaded again.",
     "summary.no_comparison": "The file list could not be compared with the previous version: its saved .torrent is missing. Instead of skipping old files, a recheck will be started.",
     "summary.full": "New files: {new}, already present: {existing}. The torrent will be replaced entirely and qBittorrent will verify the files on disk.",
     "summary.full.no_new": "The torrent will be replaced entirely and qBittorrent will verify the files on disk.",

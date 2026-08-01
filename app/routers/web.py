@@ -75,6 +75,10 @@ def _version_summary(version: TorrentVersion | None, update_mode: str, language:
         return i18n.translate("summary.full.no_new", language)
     if not diff or diff.get("mode") == "unknown":
         return i18n.translate("summary.no_comparison", language)
+    if new_count and not existing_count:
+        # Совпадений нет: обещать, что что-то не будет перекачано, нельзя.
+        return i18n.translate("summary.nothing_in_common", language, new=new_count,
+                              removed=len(diff.get("removed", [])))
     if new_count:
         return i18n.translate("summary.new_files_only", language, new=new_count, existing=existing_count)
     return i18n.translate("summary.new_files_only.no_new", language)

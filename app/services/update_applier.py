@@ -143,6 +143,7 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
             qb.add_tags(new_qb_hash, tracked.tags)
         priorities: tuple[int, int] | None = None
         comparison_failed = False
+        nothing_in_common = False
         if new_files_only:
             diff = diff_from_json(version.changelog_text)
             if not diff:
@@ -154,11 +155,20 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
                 diff = build_torrent_diff(current_version.torrent_file_path if current_version else None, version.torrent_file_path)
             priorities = _apply_new_files_only_priorities(qb, new_qb_hash, diff)
             if priorities is None:
-                # Сравнивать не с чем. Без recheck qBittorrent считает, что на диске пусто,
-                # и качает раздачу заново — ровно то, чего режим должен избегать.
-                # Recheck ничего не удаляет, только сверяет уже лежащие файлы.
-                comparison_failed = True
-                logger.warning("file comparison unavailable id=%s, falling back to recheck hash=%s", tracked_id, new_qb_hash)
+                # Пропускать нечего. Причин ровно две, и путать их нельзя:
+                # либо сравнить не с чем, либо сравнение прошло и не нашло ни одного
+                # общего файла — раздачу пересобрали целиком. Во втором случае
+                # «сохранённый .torrent недоступен» было бы неправдой.
+                comparison_failed = diff.get("mode") != "file_list"
+                nothing_in_common = not comparison_failed
+                # Без recheck qBittorrent считает, что на диске пусто, и качает раздачу
+                # заново. Recheck ничего не удаляет, только сверяет уже лежащие файлы.
+                logger.warning(
+                    "nothing to skip id=%s reason=%s hash=%s",
+                    tracked_id,
+                    "no comparison" if comparison_failed else "no common files",
+                    new_qb_hash,
+                )
                 qb.recheck_torrent(new_qb_hash)
         elif tracked.recheck_after_add:
             qb.recheck_torrent(new_qb_hash)
@@ -176,6 +186,9 @@ def apply_update(db: Session, tracked_id: int, version_id: int) -> TrackedTorren
         messages.clear_error(tracked)
         if comparison_failed:
             code, params = "msg.update_applied.no_comparison", {}
+        elif nothing_in_common:
+            code = "msg.update_applied.nothing_in_common"
+            params = {"new": len(diff.get("new", [])), "removed": len(diff.get("removed", []))}
         elif priorities:
             code = "msg.update_applied.new_files_only"
             params = {"skipped": priorities[0], "selected": priorities[1]}
