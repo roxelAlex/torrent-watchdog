@@ -4,9 +4,24 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _read_version() -> str:
+    """Версия берётся из файла VERSION, который лежит в образе.
+
+    Полем настроек она быть не может: тогда её задаёт .env, а его копируют
+    один раз и больше не трогают. После обновления контейнера подвал страницы
+    и /health показывали бы старый номер при новом коде.
+    """
+    try:
+        return (Path(__file__).resolve().parent.parent / "VERSION").read_text(encoding="utf-8").strip() or "0.0.0"
+    except OSError:
+        return "0.0.0"
+
+
+APP_VERSION = _read_version()
+
+
 class Settings(BaseSettings):
     app_name: str = "torrent-watchdog"
-    app_version: str = "0.8.3"
     app_host: str = "0.0.0.0"
     app_port: int = 8096
     tz: str = "UTC"
@@ -68,6 +83,11 @@ class Settings(BaseSettings):
     notify_language: str = "ru"
 
     log_level: str = "INFO"
+
+    @property
+    def app_version(self) -> str:
+        """Не поле, а свойство: переменной окружения её не подменить."""
+        return APP_VERSION
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
