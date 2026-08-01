@@ -10,3 +10,9 @@ data/*
 !data/torrents/
 data/torrents/*
 !data/torrents/.gitkeep
+
+# Секреты не должны уехать в публичный репозиторий даже случайно
+*token*
+*secret*
+*.pem
+*.key
