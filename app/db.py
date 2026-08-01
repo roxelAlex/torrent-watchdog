@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from pathlib import Path
 
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -37,13 +38,27 @@ if is_sqlite:
 def init_db() -> None:
     from app import models
 
-    Base.metadata.create_all(bind=engine)
-    _migrate_sqlite()
-    _ensure_indexes()
+    _run_migrations()
     _ensure_qbittorrent_client(models)
     _drop_unused_settings(models)
     _backfill_message_codes()
     _recover_interrupted_updates(models)
+
+
+def _run_migrations() -> None:
+    """Схему ведёт Alembic.
+
+    Раньше это были create_all плюс список ручных ALTER TABLE — семь штук к
+    версии 0.8, и каждый следующий пришлось бы дописывать туда же. Базовая
+    ревизия умеет и пустую базу, и ту, что работает с мая: существующее она
+    пропускает, недостающее досоздаёт.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    config = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", settings.database_url)
+    command.upgrade(config, "head")
 
 
 def _backfill_message_codes() -> None:
@@ -96,57 +111,6 @@ def _recover_interrupted_updates(models) -> None:
             db.commit()
     finally:
         db.close()
-
-
-def _ensure_indexes() -> None:
-    """create_all пропускает уже существующие таблицы целиком, вместе с их индексами."""
-    with engine.begin() as conn:
-        for table in Base.metadata.sorted_tables:
-            for index in table.indexes:
-                index.create(bind=conn, checkfirst=True)
-
-
-def _migrate_sqlite() -> None:
-    if not settings.database_url.startswith("sqlite"):
-        return
-    inspector = inspect(engine)
-    if "tracked_torrents" not in inspector.get_table_names():
-        return
-    columns = {column["name"] for column in inspector.get_columns("tracked_torrents")}
-    if "qb_client_id" not in columns:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE tracked_torrents ADD COLUMN qb_client_id INTEGER"))
-    if "update_mode" not in columns:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE tracked_torrents ADD COLUMN update_mode VARCHAR(32) DEFAULT 'new_files_only'"))
-    if "delete_replaced_files" not in columns:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE tracked_torrents ADD COLUMN delete_replaced_files BOOLEAN DEFAULT 0"))
-
-    for column, ddl in (
-        ("last_error_code", "ALTER TABLE tracked_torrents ADD COLUMN last_error_code VARCHAR(64)"),
-        ("last_error_params", "ALTER TABLE tracked_torrents ADD COLUMN last_error_params TEXT"),
-    ):
-        if column not in columns:
-            with engine.begin() as conn:
-                conn.execute(text(ddl))
-
-    event_columns = {column["name"] for column in inspector.get_columns("check_events")}
-    for column, ddl in (
-        ("message_code", "ALTER TABLE check_events ADD COLUMN message_code VARCHAR(64)"),
-        ("message_params", "ALTER TABLE check_events ADD COLUMN message_params TEXT"),
-    ):
-        if column not in event_columns:
-            with engine.begin() as conn:
-                conn.execute(text(ddl))
-
-    if "qbittorrent_clients" in inspector.get_table_names():
-        client_columns = {column["name"] for column in inspector.get_columns("qbittorrent_clients")}
-        # Понятия «основной клиент» больше нет. Колонку нужно именно удалить:
-        # она NOT NULL, и без неё в модели вставка нового клиента упала бы.
-        if "is_default" in client_columns:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE qbittorrent_clients DROP COLUMN is_default"))
 
 
 def _ensure_qbittorrent_client(models) -> None:

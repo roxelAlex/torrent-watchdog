@@ -47,8 +47,10 @@ jobs:
         include:
           - image: torrent-watchdog
             dockerfile: Dockerfile
+            description: Следит за обновлениями раздач RuTracker и применяет их в qBittorrent
           - image: torrent-watchdog-flaresolverr
             dockerfile: Dockerfile.flaresolverr
+            description: FlareSolverr с endpoints скачивания и входа для torrent-watchdog
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -74,3 +76,14 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Описание на Docker Hub обновляется теми же секретами, что и публикация:
+      # отдельный файл, потому что README не влезает в лимит в 25000 знаков.
+      - name: Описание на Docker Hub
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.REGISTRY_USER }}/${{ matrix.image }}
+          short-description: ${{ matrix.description }}
+          readme-filepath: ./docs/dockerhub.md

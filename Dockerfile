@@ -19,6 +19,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
 COPY VERSION ./VERSION
 
 # uid 1000 совпадает с владельцем ./data на хосте, иначе bind-mount будет недоступен на запись.
