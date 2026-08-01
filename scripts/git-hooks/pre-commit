@@ -1,0 +1,25 @@
+#!/bin/bash
+# Проверка по содержимому, а не по имени файла: секрет можно положить в
+# docker.txt, notes.md или куда угодно, и маска в .gitignore его не поймает.
+# Ловим то, что нельзя спутать ни с чем: префиксы токенов и cookie сессии.
+#
+# Имена читаются через -z: git экранирует не-ASCII пути в обычном выводе,
+# и файл с русским именем прошёл бы мимо проверки незамеченным.
+set -e
+
+patterns='dckr_pat_[A-Za-z0-9_-]\{20,\}\|gh[pousr]_[A-Za-z0-9]\{30,\}\|[0-9]\{9,10\}:AA[A-Za-z0-9_-]\{30,\}\|bb_session=0-[0-9]\{5,\}-\|cf_clearance=[A-Za-z0-9_.-]\{40,\}'
+
+found=""
+while IFS= read -r -d '' file; do
+    if git show ":$file" 2>/dev/null | grep -qI "$patterns"; then
+        found="$found
+  $file"
+    fi
+done < <(git diff --cached --name-only --diff-filter=ACM -z)
+
+if [ -n "$found" ]; then
+    printf 'Коммит остановлен: похоже на секрет в:%s\n' "$found" >&2
+    echo "Репозиторий публичный — уехавший туда токен придётся отзывать." >&2
+    echo "Уберите значение из файла или закоммитьте с --no-verify, если уверены." >&2
+    exit 1
+fi
