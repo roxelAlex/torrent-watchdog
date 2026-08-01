@@ -2,15 +2,15 @@
 
 Веб-сервис для отслеживания обновлений раздач RuTracker. Под наблюдение берётся ссылка на тему; сервис сохраняет текущий `info_hash`, скачивает с темы свежий `.torrent` по расписанию и показывает найденные обновления. Если включён `auto_update`, он заменяет торрент в удалённом qBittorrent: ставит старый торрент на паузу, удаляет его из qBittorrent с `deleteFiles=false`, добавляет новый `.torrent` в тот же `save_path`, восстанавливает категорию и теги и применяет выбранный режим обновления. Файлы на диске не удаляются никогда.
 
-Версия: `0.8.0`. Полный список изменений — в [CHANGELOG.md](CHANGELOG.md).
+Версия: `0.8.1`. Полный список изменений — в [CHANGELOG.md](CHANGELOG.md).
 
 ## Запуск
 
 Нужен только Docker и файл настроек:
 
 ```bash
-curl -O https://raw.githubusercontent.com/roxelalex/torrent-watchdog/master/docker-compose.yml
-curl -o .env https://raw.githubusercontent.com/roxelalex/torrent-watchdog/master/.env.example
+curl -O https://raw.githubusercontent.com/roxelalex/torrent-watchdog/main/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/roxelalex/torrent-watchdog/main/.env.example
 docker compose up -d
 ```
 

@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
+from app.i18n import translate
 from app.db import SessionLocal, init_db
 from app.routers import api, health, web
 from app.scheduler import start_scheduler, stop_scheduler
@@ -45,7 +46,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
-app.add_middleware(SessionMiddleware, secret_key=settings.app_secret_key, same_site="lax", https_only=False)
 
 
 @app.middleware("http")
@@ -56,9 +56,14 @@ async def auth_middleware(request: Request, call_next):
     if is_authenticated(request):
         return await call_next(request)
     if request.url.path.startswith("/api"):
-        return JSONResponse({"detail": "Требуется авторизация"}, status_code=401)
+        return JSONResponse({"detail": translate("error.auth.required")}, status_code=401)
     return RedirectResponse("/login", status_code=303)
 
+
+# Добавляется последним намеренно: Starlette делает внешним слоем тот middleware,
+# что зарегистрирован позже всех. Сессия должна разворачиваться до проверки входа,
+# иначе request.session в ней недоступен и каждая страница падает с 500.
+app.add_middleware(SessionMiddleware, secret_key=settings.app_secret_key, same_site="lax", https_only=False)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(health.router)

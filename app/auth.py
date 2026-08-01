@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from app.config import get_settings
+from app.i18n import translate
 
 security = HTTPBasic(auto_error=False)
 
@@ -29,7 +30,7 @@ def require_auth(request: Request, credentials: HTTPBasicCredentials | None = De
     if is_authenticated(request):
         return settings.app_auth_username
     if not credentials:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Требуется авторизация")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=translate("error.auth.required"))
     if not check_credentials(credentials.username, credentials.password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"}, detail="Неверный логин или пароль")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"}, detail=translate("login.failed"))
     return credentials.username

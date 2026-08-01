@@ -252,6 +252,7 @@ MESSAGES = {
     "settings.login_ok": "Signed in, the session cookie has been refreshed.",
 
     # Errors shown to the user
+    "error.auth.required": "Authorisation required",
     "error.source.not_topic": "A RuTracker topic link is required, like https://rutracker.org/forum/viewtopic.php?t=123456. Magnet links and direct .torrent links are not accepted.",
     "error.source.unsupported": "A page link needs a supported resolver. Only RuTracker is supported for now.",
     "error.magnet.no_btih": "The magnet link has no xt=urn:btih",

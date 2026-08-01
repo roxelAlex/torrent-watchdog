@@ -252,6 +252,7 @@ MESSAGES = {
     "settings.login_ok": "Вход выполнен, cookie сессии обновлён.",
 
     # Ошибки, которые видит пользователь
+    "error.auth.required": "Требуется авторизация",
     "error.source.not_topic": "Нужна ссылка на тему RuTracker вида https://rutracker.org/forum/viewtopic.php?t=123456. Magnet и прямые ссылки на .torrent не принимаются.",
     "error.source.unsupported": "Для ссылки на страницу нужен поддерживаемый resolver. Сейчас поддержан RuTracker.",
     "error.magnet.no_btih": "Magnet-ссылка не содержит xt=urn:btih",
