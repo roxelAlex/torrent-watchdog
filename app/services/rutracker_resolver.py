@@ -51,7 +51,10 @@ def _download_with_browser(downloader_url: str, source_url: str, download_url: s
             "download_url": download_url,
             "cookies": flaresolverr.cookies_from_header(cookie),
         },
-        timeout=100,
+        # Внутри endpoint последовательно ждут Cloudflare (CHALLENGE_TIMEOUT_MS)
+        # и сохранение файла браузером. Ждём дольше их суммы: иначе оборвём
+        # запрос сами и получим невнятный таймаут вместо настоящей ошибки.
+        timeout=190,
     )
     # 401 отдаётся, когда браузеру подсунули страницу вместо файла: проверку
     # содержимого делает сам endpoint, здесь мы только опознаём его вердикт.
@@ -116,6 +119,7 @@ def _download_torrent_until_success(
     settings = get_settings()
     attempt = 1
     while True:
+        refreshed_session = False
         try:
             content = _fetch_torrent(download_url, solver_url, headers, flaresolver_endpoint)
             logger.info("rutracker download success topic_id=%s attempt=%s", topic_id, attempt)
@@ -127,6 +131,7 @@ def _download_torrent_until_success(
             if isinstance(exc, SessionExpired) and relogin:
                 try:
                     headers["Cookie"] = relogin()
+                    refreshed_session = True
                     logger.info("rutracker session refreshed, retrying topic_id=%s", topic_id)
                 except rutracker_auth.LoginUnavailable as login_exc:
                     logger.warning("rutracker relogin unavailable: %s", login_exc)
@@ -134,6 +139,11 @@ def _download_torrent_until_success(
             if settings.rutracker_max_attempts > 0 and attempt >= settings.rutracker_max_attempts:
                 raise ServiceUnavailable("error.rutracker.attempts", attempts=attempt, error=localize(exc, None)) from exc
             attempt += 1
+            # Пауза между попытками рассчитана на Cloudflare: он отказывает
+            # окнами, и ждать имеет смысл долго. Но со свежим cookie ждать
+            # нечего — причина отказа уже устранена, повторяем сразу.
+            if refreshed_session:
+                continue
             time.sleep(max(1, settings.rutracker_retry_delay_seconds))
 
 

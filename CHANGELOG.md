@@ -2,6 +2,12 @@
 
 Русская версия — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.8.6
+
+- Nightly checks kept failing while the same check run by hand hours later went through. Cloudflare turns RuTracker away in windows tens of minutes long, and three attempts ten seconds apart burned through all of them inside a single window. The pause between attempts is now 1800 seconds and there are five of them, so the check catches the moment the tracker starts letting requests through again instead of waiting for someone to press the button.
+- The budget for passing Cloudflare is 120 seconds instead of 60. On bad nights loading the challenge page alone ate 25–36 of those 60 seconds and the attempt timed out where the browser had seconds left to go; when things are fine the challenge is solved in 12–14 seconds, so the headroom costs nothing. Client-side timeouts were raised to match — otherwise the app would cut the connection before FlareSolverr gives up, and the real reason would never reach the journal.
+- A retry after logging in again no longer waits out the long pause. An expired session is fixed by the fresh cookie, and there is nothing left to wait for; the long pause now applies only to Cloudflare refusals.
+
 ## 0.8.5
 
 - Release notes are generated from `CHANGELOG.md` by `scripts/release_notes.py`, so a tag no longer arrives with an empty description. All six existing releases were backfilled.

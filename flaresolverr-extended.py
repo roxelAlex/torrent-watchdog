@@ -15,6 +15,11 @@ import utils
 
 AUTH_COOKIES = ("bb_session", "bb_data", "bb_t")
 CAPTCHA_MARKERS = ("cap_sid", "cap_code", "введите код")
+# Бюджет на прохождение Cloudflare. Шестидесяти секунд не хватало: в плохие
+# ночи только загрузка страницы съедала половину, и попытка падала по таймауту
+# там, где браузеру оставалось несколько секунд. Когда всё хорошо, челлендж
+# решается за 12–14 с, так что запас ничего не стоит.
+CHALLENGE_TIMEOUT_MS = 120000
 
 
 class NotATorrent(Exception):
@@ -56,7 +61,7 @@ def download():
                     "cmd": "request.get",
                     "url": source_url,
                     "session": session_id,
-                    "maxTimeout": 60000,
+                    "maxTimeout": CHALLENGE_TIMEOUT_MS,
                     "cookies": cookies,
                 }
             )
@@ -158,7 +163,7 @@ def login():
                 "cmd": "request.get",
                 "url": login_url,
                 "session": session_id,
-                "maxTimeout": 60000,
+                "maxTimeout": CHALLENGE_TIMEOUT_MS,
                 "cookies": cookies,
             })
         )

@@ -71,8 +71,11 @@ class Settings(BaseSettings):
     # Защита от долбёжки трекера при неверном пароле.
     rutracker_login_min_interval_seconds: int = 300
     rutracker_user_agent: str = "Mozilla/5.0"
-    rutracker_retry_delay_seconds: int = 10
-    rutracker_max_attempts: int = 3
+    # Cloudflare отказывает не разово, а окнами в десятки минут: три попытки
+    # подряд укладывались в три минуты и сгорали внутри одного такого окна.
+    # Повтор через полчаса ловит момент, когда трекер снова пускает.
+    rutracker_retry_delay_seconds: int = 1800
+    rutracker_max_attempts: int = 5
     flaresolver_address: str = ""
     flaresolver_port: int = 8191
 

@@ -81,7 +81,9 @@ def _login_via_browser(login_endpoint: str, username: str, password: str, cookie
             "login_url": LOGIN_URL,
             "cookies": cookies_for_login_page(cookie),
         },
-        timeout=150,
+        # Cloudflare (CHALLENGE_TIMEOUT_MS), затем отправка формы и ожидание
+        # cookie сессии. Ждём с запасом поверх их суммы.
+        timeout=200,
     )
     if response.status_code >= 500:
         raise LoginUnavailable("error.login.flare_failed", error=response.text.strip()[:200])

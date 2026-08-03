@@ -16,6 +16,12 @@ from urllib.parse import urlsplit, urlunsplit
 # включаем их только для контейнера из этого compose-файла.
 EXTENDED_HOSTNAME = "flaresolverr"
 
+# Столько же ждёт браузер в нашем образе (CHALLENGE_TIMEOUT_MS), плюс запас на
+# сам HTTP-обмен: ответ должен прийти позже, чем FlareSolverr сдастся, иначе мы
+# оборвём соединение и не увидим причину.
+CHALLENGE_TIMEOUT_MS = 120000
+CALL_TIMEOUT_SECONDS = 130
+
 
 def endpoint_url(address: str, port: str) -> str | None:
     address = address.strip().rstrip("/")
@@ -75,7 +81,7 @@ def cookie_header(cookies: list[dict]) -> str:
     return "; ".join(f"{name}={value}" for name, value in unique.items())
 
 
-def call(endpoint: str, payload: dict[str, object], timeout: int = 65) -> dict[str, object]:
+def call(endpoint: str, payload: dict[str, object], timeout: int = CALL_TIMEOUT_SECONDS) -> dict[str, object]:
     response = requests.post(endpoint, json=payload, timeout=timeout)
     response.raise_for_status()
     try:
@@ -94,7 +100,7 @@ def solve(endpoint: str, source_url: str, cookie: str, fallback_user_agent: str)
         {
             "cmd": "request.get",
             "url": source_url,
-            "maxTimeout": 60000,
+            "maxTimeout": CHALLENGE_TIMEOUT_MS,
             "cookies": cookies_from_header(cookie),
         },
     )
