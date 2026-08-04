@@ -2,6 +2,11 @@
 
 Русская версия — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.8.7
+
+- The nightly check failed with `Failed to resolve 'flaresolverr'`. The container carries a `container_name`, and with one set the network alias by service name is not registered — the app was left unable to find FlareSolverr at all, and every attempt died on DNS before a single request left the container. The name `flaresolverr` is now declared in `docker-compose.yml` explicitly.
+- That name is not cosmetic, which is why the fix belongs in compose rather than in the settings. The app tells our image apart from a stock FlareSolverr by exactly this hostname and only then enables the download endpoint. Putting the container name into the settings instead would look like a fix and quietly send downloads to `/v1`, which cannot return a .torrent file.
+
 ## 0.8.6
 
 - Nightly checks kept failing while the same check run by hand hours later went through. Cloudflare turns RuTracker away in windows tens of minutes long, and three attempts ten seconds apart burned through all of them inside a single window. The pause between attempts is now 1800 seconds and there are five of them, so the check catches the moment the tracker starts letting requests through again instead of waiting for someone to press the button.

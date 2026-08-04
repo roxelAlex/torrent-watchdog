@@ -4,6 +4,13 @@ services:
     # а dl.php RuTracker возвращает файл. Подробности — в README.
     image: ${IMAGE_PREFIX:-roxelalex}/torrent-watchdog-flaresolverr:${IMAGE_TAG:-latest}
     container_name: torrent-watchdog-flaresolverr
+    # Имя `flaresolverr` в сети — не косметика: по нему приложение отличает наш
+    # образ от обычного FlareSolverr и включает endpoint скачивания. Задаём его
+    # явно, иначе при заданном container_name алиас по имени сервиса пропадает.
+    networks:
+      default:
+        aliases:
+          - flaresolverr
     environment:
       - TZ=${TZ:-UTC}
       - LOG_LEVEL=info
