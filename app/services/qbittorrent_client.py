@@ -12,6 +12,24 @@ from app.utils import mask_url
 logger = logging.getLogger(__name__)
 
 
+def _raise_for_status(response: requests.Response) -> None:
+    """raise_for_status, но с телом ответа в тексте ошибки.
+
+    Причину отказа qBittorrent пишет именно в тело: «Category cannot be
+    empty», «Torrent file is not valid». Без него и в журнале, и в сообщении
+    раздачи остаётся один код, по которому ничего не понять. Когда тело
+    пустое или повторяет reason phrase (так отвечает 409 на /torrents/add),
+    добавлять нечего — оставляем сообщение requests как есть.
+    """
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        detail = " ".join(response.text.split())[:500]
+        if not detail or detail == (response.reason or "").strip():
+            raise
+        raise requests.HTTPError(f"{exc}: {detail}", request=exc.request, response=response) from exc
+
+
 class QBittorrentClient:
     def __init__(self, config: QbittorrentClientConfig | None = None) -> None:
         settings = get_settings()
@@ -35,7 +53,7 @@ class QBittorrentClient:
             timeout=timeout or self.timeout,
             verify=self.verify_tls,
         )
-        response.raise_for_status()
+        _raise_for_status(response)
         if response.status_code == 204 and any(name.startswith("QBT_SID") for name in self.session.cookies.keys()):
             return
         if response.text.strip() != "Ok.":
@@ -48,7 +66,7 @@ class QBittorrentClient:
             if response.status_code == 403:
                 self.login(timeout=self.probe_timeout)
                 response = self.session.get(self._url("/api/v2/app/version"), timeout=self.probe_timeout, verify=self.verify_tls)
-            response.raise_for_status()
+            _raise_for_status(response)
             return {"status": "ok", "host": mask_url(self.base_url), "version": response.text.strip()}
         except Exception as exc:
             return {"status": "unavailable", "host": mask_url(self.base_url), "error": str(exc)}
@@ -58,7 +76,7 @@ class QBittorrentClient:
         if response.status_code == 403:
             self.login()
             response = self.session.post(self._url(path), data=data or {}, files=files, timeout=self.timeout, verify=self.verify_tls)
-        response.raise_for_status()
+        _raise_for_status(response)
         return response
 
     def _post_first_available(self, paths: list[str], data: dict[str, Any]) -> str:
@@ -80,7 +98,7 @@ class QBittorrentClient:
         if response.status_code == 403:
             self.login()
             response = self.session.get(self._url(path), params=params or {}, timeout=self.timeout, verify=self.verify_tls)
-        response.raise_for_status()
+        _raise_for_status(response)
         return response
 
     def get_torrent(self, torrent_hash: str) -> dict[str, Any] | None:
@@ -102,6 +120,44 @@ class QBittorrentClient:
                 files={"torrents": (path.name, torrent_file, "application/x-bittorrent")},
             )
         return path.stem.lower()
+
+    def add_or_reuse_torrent_file(
+        self,
+        torrent_file_path: str,
+        info_hash: str,
+        save_path: str,
+        category: str = "",
+        tags: str = "",
+        paused: bool = True,
+    ) -> str:
+        """Добавляет раздачу, а если она уже в клиенте — берёт существующую.
+
+        qBittorrent отвечает 409 на /torrents/add, когда не добавил ни одной
+        раздачи, и дубликат по инфохешу — ровно этот случай (проверено на
+        v5.2.3, WebAPI 2.15.1). Тело ответа при этом пустое, так что отличить
+        дубликат от другого отказа можно только перепроверкой списка раздач.
+
+        Раздача, добавленная руками или прошлой неудачной попыткой, могла
+        осесть в клиенте без выбранных категории и тегов, поэтому им место
+        и в этой ветке: при обычном добавлении их несёт сам запрос.
+        """
+        if self.get_torrent(info_hash):
+            logger.info("qbittorrent host=%s action=add hash=%s result=reuse", mask_url(self.base_url), info_hash)
+            return self._adopt_torrent(info_hash, category, tags)
+
+        try:
+            return self.add_torrent_file(torrent_file_path, save_path, category, tags, paused)
+        except requests.HTTPError as exc:
+            if exc.response is None or exc.response.status_code != 409 or not self.get_torrent(info_hash):
+                raise
+            logger.info("qbittorrent host=%s action=add hash=%s result=reuse-409", mask_url(self.base_url), info_hash)
+            return self._adopt_torrent(info_hash, category, tags)
+
+    def _adopt_torrent(self, info_hash: str, category: str, tags: str) -> str:
+        if category:
+            self.set_category(info_hash, category)
+        self.add_tags(info_hash, tags)
+        return info_hash.lower()
 
     def pause_torrent(self, torrent_hash: str) -> None:
         endpoint = self._post_first_available(["/api/v2/torrents/pause", "/api/v2/torrents/stop"], data={"hashes": torrent_hash})

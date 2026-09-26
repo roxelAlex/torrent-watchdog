@@ -52,7 +52,16 @@ def create_initial_torrent(db: Session, payload) -> TrackedTorrent:
         qb.login()
         # Своя категория должна существовать до добавления: иначе раздача осядет без неё.
         ensure_category(qb, payload.category, getattr(payload, "category_save_path", ""))
-        qb_hash = qb.add_torrent_file(resolved.torrent_file_path or "", payload.save_path, payload.category, payload.tags, payload.add_paused)
+        # Раздача могла уже лежать в клиенте: тогда её берут как есть, а не падают
+        # с 409 — так же, как это делает применение обновления.
+        qb_hash = qb.add_or_reuse_torrent_file(
+            resolved.torrent_file_path or "",
+            resolved.info_hash,
+            payload.save_path,
+            payload.category,
+            payload.tags,
+            payload.add_paused,
+        )
         tracked.current_qb_hash = qb_hash
         db.commit()
         if payload.recheck_after_add:

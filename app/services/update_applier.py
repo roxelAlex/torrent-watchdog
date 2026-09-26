@@ -110,29 +110,6 @@ def may_remove_replaced_files(
     return True
 
 
-def _add_or_reuse_torrent(
-    qb: QBittorrentClient,
-    torrent_file_path: str,
-    info_hash: str,
-    save_path: str,
-    category: str,
-    tags: str,
-    paused: bool,
-) -> str:
-    existing = qb.get_torrent(info_hash)
-    if existing:
-        logger.info("reuse existing qBittorrent torrent hash=%s after partial update", info_hash)
-        return info_hash.lower()
-
-    try:
-        return qb.add_torrent_file(torrent_file_path, save_path, category, tags, paused)
-    except requests.HTTPError as exc:
-        if exc.response is None or exc.response.status_code != 409 or not qb.get_torrent(info_hash):
-            raise
-        logger.info("reuse concurrently registered qBittorrent torrent hash=%s", info_hash)
-        return info_hash.lower()
-
-
 def apply_update(db: Session, tracked_id: int, version_id: int, allow_file_removal: bool = True) -> TrackedTorrent:
     tracked = db.get(TrackedTorrent, tracked_id)
     version = db.get(TorrentVersion, version_id)
@@ -178,8 +155,7 @@ def apply_update(db: Session, tracked_id: int, version_id: int, allow_file_remov
                 qb.delete_torrent(old_qb_hash, delete_files=False)
 
         new_files_only = tracked.update_mode == "new_files_only"
-        new_qb_hash = _add_or_reuse_torrent(
-            qb,
+        new_qb_hash = qb.add_or_reuse_torrent_file(
             version.torrent_file_path,
             version.info_hash,
             tracked.save_path,

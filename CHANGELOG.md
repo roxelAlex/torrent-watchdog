@@ -2,6 +2,13 @@
 
 Русская версия — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.8.8
+
+- Adding a tracked torrent failed with `409 Client Error: Conflict` when the release was already in qBittorrent. The client answers 409 on `/torrents/add` whenever it added no torrent at all, and a duplicate info hash is exactly that case (verified on v5.2.3, WebAPI 2.15.1). Such a torrent is now taken as it is: its info hash is recorded, and the chosen category and tags are applied to it with separate requests.
+- The logic existed, but only when applying an update — `_add_or_reuse_torrent` in `update_applier`. Creating a new tracking bypassed it and therefore tripped over a torrent added by hand. It is now a single client method, `add_or_reuse_torrent_file`, and both paths behave the same.
+- A 409 is not taken as a duplicate on trust: the torrent is looked up in the client's list, and if it is not there the refusal stays a refusal. A real error is not swallowed.
+- qBittorrent refusals are explained by the response body, not by the code alone. The reason is what the client writes there — "Category cannot be empty", "Torrent file is not valid" — and it used to be lost: the journal and the torrent's message were left with a bare code. An empty body, or one repeating the reason phrase (which is how 409 answers), adds nothing to the message.
+
 ## 0.8.7
 
 - The nightly check failed with `Failed to resolve 'flaresolverr'`. The container carries a `container_name`, and with one set the network alias by service name is not registered — the app was left unable to find FlareSolverr at all, and every attempt died on DNS before a single request left the container. The name `flaresolverr` is now declared in `docker-compose.yml` explicitly.
