@@ -2,6 +2,11 @@
 
 Русская версия — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.8.9
+
+- Checks failed with `Failed to resolve 'flaresolverr'` again, this time three nights in a row. The containers had been updated by dockpeek, which recreates them on its own rather than through compose and drops the `flaresolverr` alias from `docker-compose.yml` in the process. Watchtower and similar updaters do the same, so compose alone is not enough.
+- When the alias does not resolve but the container name `torrent-watchdog-flaresolverr` does, the app goes by the container name and logs a warning. Docker always registers the container name on the network. Our image is recognised under both names, so browser download and sign-in never fall through to `/v1`.
+
 ## 0.8.8
 
 - Adding a tracked torrent failed with `409 Client Error: Conflict` when the release was already in qBittorrent. The client answers 409 on `/torrents/add` whenever it added no torrent at all, and a duplicate info hash is exactly that case (verified on v5.2.3, WebAPI 2.15.1). Such a torrent is now taken as it is: its info hash is recorded, and the chosen category and tags are applied to it with separate requests.

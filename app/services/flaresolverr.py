@@ -4,6 +4,9 @@
 и вход на трекер, а зависеть друг от друга им незачем.
 """
 
+import logging
+import socket
+
 import requests
 
 from app.errors import InvalidInput, ServiceUnavailable
@@ -11,16 +14,47 @@ from app.i18n import translate
 
 from urllib.parse import urlsplit, urlunsplit
 
+logger = logging.getLogger(__name__)
+
 # Скачивание и вход браузером — это собственные endpoints нашего образа
 # (Dockerfile.flaresolverr). У стандартного FlareSolverr их нет, поэтому
-# включаем их только для контейнера из этого compose-файла.
+# включаем их только для контейнера из этого compose-файла: по алиасу,
+# заданному в compose, или по его container_name.
 EXTENDED_HOSTNAME = "flaresolverr"
+CONTAINER_HOSTNAME = "torrent-watchdog-flaresolverr"
+EXTENDED_HOSTNAMES = {EXTENDED_HOSTNAME, CONTAINER_HOSTNAME}
 
 # Столько же ждёт браузер в нашем образе (CHALLENGE_TIMEOUT_MS), плюс запас на
 # сам HTTP-обмен: ответ должен прийти позже, чем FlareSolverr сдастся, иначе мы
 # оборвём соединение и не увидим причину.
 CHALLENGE_TIMEOUT_MS = 120000
 CALL_TIMEOUT_SECONDS = 130
+
+
+def _resolves(hostname: str) -> bool:
+    try:
+        socket.getaddrinfo(hostname, None)
+    except OSError:
+        return False
+    return True
+
+
+def _own_container_host(hostname: str) -> str:
+    """Алиас flaresolverr, а если он пропал из сети — имя контейнера.
+
+    Алиас живёт только в compose. Обновлялки вроде dockpeek или Watchtower
+    пересоздают контейнер сами и теряют его, а имя контейнера Docker
+    регистрирует в сети всегда — по нему наш FlareSolverr и находится.
+    """
+    if hostname != EXTENDED_HOSTNAME or _resolves(hostname) or not _resolves(CONTAINER_HOSTNAME):
+        return hostname
+    logger.warning(
+        "FlareSolverr alias %r does not resolve, using container name %r; "
+        "recreate containers with `docker compose up -d --force-recreate` to restore the alias",
+        EXTENDED_HOSTNAME,
+        CONTAINER_HOSTNAME,
+    )
+    return CONTAINER_HOSTNAME
 
 
 def endpoint_url(address: str, port: str) -> str | None:
@@ -45,6 +79,9 @@ def endpoint_url(address: str, port: str) -> str | None:
     except ValueError as exc:
         raise InvalidInput("error.flare.port_in_address") from exc
     netloc = parsed.netloc if has_port else f"{parsed.netloc}:{configured_port}"
+    host = _own_container_host(parsed.hostname)
+    if host != parsed.hostname:
+        netloc = netloc.replace(parsed.hostname, host, 1)
     return f"{urlunsplit((parsed.scheme, netloc, parsed.path, '', '')).rstrip('/')}/v1"
 
 
@@ -53,7 +90,7 @@ def extended_url(endpoint: str | None, path: str) -> str | None:
     if not endpoint:
         return None
     parsed = urlsplit(endpoint)
-    if parsed.hostname != EXTENDED_HOSTNAME:
+    if parsed.hostname not in EXTENDED_HOSTNAMES:
         return None
     return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
 

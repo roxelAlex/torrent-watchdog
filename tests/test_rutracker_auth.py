@@ -6,6 +6,21 @@ from app.services import flaresolverr
 from app.services.rutracker_auth import has_auth_cookie, normalize_cookie
 
 
+def _dns(monkeypatch, *known: str) -> None:
+    """Резолвятся только перечисленные имена — сеть тестам не нужна."""
+    def getaddrinfo(host, *args, **kwargs):
+        if host not in known:
+            raise OSError(f"unknown host {host}")
+        return [(None, None, None, "", ("172.26.0.3", 0))]
+
+    monkeypatch.setattr(flaresolverr.socket, "getaddrinfo", getaddrinfo)
+
+
+@pytest.fixture(autouse=True)
+def compose_network(monkeypatch):
+    _dns(monkeypatch, flaresolverr.EXTENDED_HOSTNAME, flaresolverr.CONTAINER_HOSTNAME)
+
+
 def test_cookie_header_prefix_is_stripped():
     assert normalize_cookie("Cookie: bb_session=1; bb_t=2") == "bb_session=1; bb_t=2"
     assert normalize_cookie("  cookie:bb_session=1  ") == "bb_session=1"
@@ -46,6 +61,11 @@ def test_extended_url_only_for_own_container():
     assert flaresolverr.extended_url(endpoint, "/download") == "http://flaresolverr:8191/download"
 
 
+def test_extended_url_for_container_name():
+    endpoint = "http://torrent-watchdog-flaresolverr:8191/v1"
+    assert flaresolverr.extended_url(endpoint, "/download") == "http://torrent-watchdog-flaresolverr:8191/download"
+
+
 @pytest.mark.parametrize("endpoint", ["http://192.168.1.10:8191/v1", "https://solver.example/v1", None, ""])
 def test_extended_url_absent_for_foreign_flaresolverr(endpoint):
     """У стандартного FlareSolverr наших endpoints нет — дёргать их нельзя."""
@@ -55,6 +75,25 @@ def test_extended_url_absent_for_foreign_flaresolverr(endpoint):
 def test_endpoint_url_adds_port_when_missing():
     assert flaresolverr.endpoint_url("http://flaresolverr", "8191") == "http://flaresolverr:8191/v1"
     assert flaresolverr.endpoint_url("http://flaresolverr:9000", "8191") == "http://flaresolverr:9000/v1"
+
+
+def test_lost_alias_falls_back_to_container_name(monkeypatch):
+    """dockpeek пересоздал контейнер без алиаса из compose — имя контейнера осталось."""
+    _dns(monkeypatch, flaresolverr.CONTAINER_HOSTNAME)
+    endpoint = flaresolverr.endpoint_url("http://flaresolverr", "8191")
+    assert endpoint == "http://torrent-watchdog-flaresolverr:8191/v1"
+    assert flaresolverr.extended_url(endpoint, "/download") == "http://torrent-watchdog-flaresolverr:8191/download"
+
+
+def test_alias_kept_when_container_name_unknown_too(monkeypatch):
+    """Подменять не на что — пусть ошибка DNS назовёт настроенный адрес."""
+    _dns(monkeypatch)
+    assert flaresolverr.endpoint_url("http://flaresolverr", "8191") == "http://flaresolverr:8191/v1"
+
+
+def test_foreign_host_is_never_replaced(monkeypatch):
+    _dns(monkeypatch, flaresolverr.CONTAINER_HOSTNAME)
+    assert flaresolverr.endpoint_url("http://solver.lan", "8191") == "http://solver.lan:8191/v1"
 
 
 def test_empty_address_disables_flaresolverr():
